@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# User data (notes, settings)
+data/
+
+# Local configuration
+.claude/
+.superpowers/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

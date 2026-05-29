@@ -1,0 +1,13 @@
+{
+  "name": "quickmemo",
+  "version": "1.0.0",
+  "description": "Win11 style quick memo widget with reminders",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev"
+  },
+  "dependencies": {
+    "electron": "^33.0.0"
+  }
+}
