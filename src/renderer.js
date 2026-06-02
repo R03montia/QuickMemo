@@ -91,11 +91,13 @@ let isWindowMaximized = false;
 function updateMaximizeIcon() {
   const btnBar = document.getElementById('btn-maximize-bar');
   const btnFloat = document.getElementById('btn-maximize');
-  if (btnBar) btnBar.textContent = isWindowMaximized ? '❐' : '□';
+  // □● 带标记确认代码已执行
+  if (btnBar) btnBar.textContent = (isWindowMaximized ? '❐' : '□') + '●';
   if (btnFloat) {
     btnFloat.innerHTML = isWindowMaximized
       ? '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2" y="1.5" width="7" height="7" rx="0.5"/><rect x="3" y="3.5" width="7" height="7" rx="0.5"/></svg>'
       : '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1.5" y="1.5" width="9" height="9" rx="1"/></svg>';
+    btnFloat.style.outline = '2px solid red';
   }
 }
 
