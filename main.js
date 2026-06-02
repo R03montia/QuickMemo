@@ -175,6 +175,45 @@ function createWindow() {
     mainWindow.show();
   });
 
+  // 最大化时拖拽标题栏 → 自动还原继续拖
+  let savedBounds = { width: 800, height: 600, x: undefined, y: undefined };
+  mainWindow.on('resize', () => {
+    if (!mainWindow.isMaximized()) {
+      savedBounds = mainWindow.getBounds();
+    }
+  });
+  mainWindow.on('move', () => {
+    if (!mainWindow.isMaximized()) {
+      const b = mainWindow.getBounds();
+      savedBounds.x = b.x;
+      savedBounds.y = b.y;
+    }
+  });
+  mainWindow.on('will-move', (event) => {
+    if (mainWindow.isMaximized()) {
+      event.preventDefault();
+      mainWindow.unmaximize();
+      const { screen } = require('electron');
+      const cursor = screen.getCursorScreenPoint();
+      const w = savedBounds.width || 800;
+      mainWindow.setBounds({
+        x: Math.round(cursor.x - w / 2),
+        y: Math.round(cursor.y - 16),
+        width: w,
+        height: savedBounds.height || 600,
+      });
+    }
+  });
+
+  // 最大化状态变化 → 通知渲染进程更新按钮图标
+  const notifyMaximize = () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('maximize-changed', mainWindow.isMaximized());
+    }
+  };
+  mainWindow.on('maximize', notifyMaximize);
+  mainWindow.on('unmaximize', notifyMaximize);
+
   mainWindow.on('close', (event) => {
     if (!app.isQuitting) { event.preventDefault(); mainWindow.hide(); }
   });

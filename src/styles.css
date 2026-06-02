@@ -1327,22 +1327,6 @@ textarea:focus-visible {
   flex-direction: column;
 }
 
-/* 约束 Toast UI Editor 根元素不超出容器 */
-.toastui-editor-defaultUI {
-  min-height: 0 !important;
-  max-height: 100% !important;
-  display: flex !important;
-  flex-direction: column !important;
-}
-
-/* Toast UI Editor 工具栏：禁止换行，溢出时横向滚动 */
-.toastui-editor-defaultUI .toastui-editor-toolbar {
-  flex-shrink: 0 !important;
-  flex-wrap: nowrap !important;
-  overflow-x: auto !important;
-  overflow-y: hidden !important;
-}
-
 /* 编辑器主区域：允许内部滚动 */
 .toastui-editor-main {
   flex: 1 !important;

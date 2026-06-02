@@ -22,6 +22,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onAppearanceChanged: (cb) => {
     ipcRenderer.on('appearance-changed', (_, mode) => cb(mode));
   },
+  onMaximizeChanged: (cb) => {
+    ipcRenderer.on('maximize-changed', (_, maximized) => cb(maximized));
+  },
   getPanelAlpha: () => ipcRenderer.invoke('get-panel-alpha'),
   setPanelAlpha: (alpha) => ipcRenderer.invoke('set-panel-alpha', alpha),
   getNotemsContent: (key) => ipcRenderer.invoke('notems-get', key),
