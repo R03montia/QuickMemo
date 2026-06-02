@@ -30,6 +30,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onShortcutChanged: (cb) => {
     ipcRenderer.on('shortcut-changed', (_, acc) => cb(acc));
   },
+  onOpenMdFile: (cb) => {
+    ipcRenderer.on('open-md-file', (_, data) => cb(data));
+  },
+  saveFile: (filePath, content) => ipcRenderer.invoke('save-file', { filePath, content }),
   getPanelAlpha: () => ipcRenderer.invoke('get-panel-alpha'),
   setPanelAlpha: (alpha) => ipcRenderer.invoke('set-panel-alpha', alpha),
   getNotemsContent: (key) => ipcRenderer.invoke('notems-get', key),
