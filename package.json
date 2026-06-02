@@ -8,7 +8,7 @@
     "dev": "electron . --dev"
   },
   "dependencies": {
-    "@toast-ui/editor": "^3.2.2",
-    "electron": "^33.0.0"
+    "electron": "^33.0.0",
+    "marked": "^18.0.4"
   }
 }

@@ -86,11 +86,14 @@ function getMdFileFromArgs(argv) {
 }
 
 function openMdFile(filePath) {
-  if (!fs.existsSync(filePath)) return;
   try {
+    if (!filePath || !fs.existsSync(filePath)) {
+      console.warn('QuickMemo: file not found', filePath);
+      return;
+    }
     const content = fs.readFileSync(filePath, 'utf-8');
     const name = path.basename(filePath, path.extname(filePath));
-    if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
       mainWindow.show();
       mainWindow.focus();
       mainWindow.webContents.send('open-md-file', {
@@ -272,36 +275,44 @@ function createWindow() {
 // ====== 应用生命周期 ======
 app.isQuitting = false;
 
-app.on('before-quit', () => {
-  app.isQuitting = true;
-  globalShortcut.unregisterAll();
-});
-
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
   app.quit();
 } else {
   app.on('second-instance', (_event, argv) => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.show();
-      mainWindow.focus();
+    try {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.show();
+        mainWindow.focus();
+      }
+      const filePath = getMdFileFromArgs(argv);
+      if (filePath) openMdFile(filePath);
+    } catch (e) {
+      console.error('QuickMemo: second-instance error:', e);
     }
-    // 处理拖入的文件（第二个实例时）
-    const filePath = getMdFileFromArgs(argv);
-    if (filePath) openMdFile(filePath);
   });
 
   // 文件关联打开（macOS）
   app.on('open-file', (_event, filePath) => {
-    openMdFile(filePath);
+    try {
+      openMdFile(filePath);
+    } catch (e) {
+      console.error('QuickMemo: open-file error:', e);
+    }
   });
 
   app.whenReady().then(() => {
     // 应用保存的主题偏好
     const savedTheme = getThemePreference();
     nativeTheme.themeSource = savedTheme;
+
+    // 注册 before-quit（必须在 app.isReady() 之后才能使用 globalShortcut）
+    app.on('before-quit', () => {
+      app.isQuitting = true;
+      try { globalShortcut.unregisterAll(); } catch {}
+    });
 
     createWindow();
     createTray();
@@ -311,10 +322,18 @@ if (!gotTheLock) {
     registerGlobalShortcut(getShortcut());
 
     // 处理首次启动时的文件参数
-    mainWindow.webContents.on('did-finish-load', () => {
-      const filePath = getMdFileFromArgs(process.argv);
-      if (filePath) openMdFile(filePath);
-    });
+    try {
+      mainWindow.webContents.on('did-finish-load', () => {
+        try {
+          const filePath = getMdFileFromArgs(process.argv);
+          if (filePath) openMdFile(filePath);
+        } catch (e) {
+          console.error('QuickMemo: did-finish-load file-open error:', e);
+        }
+      });
+    } catch (e) {
+      console.error('QuickMemo: failed to register did-finish-load:', e);
+    }
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();

@@ -33,6 +33,9 @@ let currentAppearance = 'bordered';
 
 // ====== 初始化 ======
 async function init() {
+  // 同步注册 IPC 监听器（必须在任何 await 之前，防止竞态）
+  setupFileOpenSync();
+
   currentAccent = await window.electronAPI.getAccentColor();
   const theme = await window.electronAPI.getTheme();
   isDark = theme === 'dark';
@@ -73,32 +76,64 @@ async function init() {
   setupCalendar();
   setupTimeWheel();
   setupFileOpen();
+
+  // 标记初始化完成，处理等待中的文件打开
+  initComplete = true;
+  if (pendingFileOpen) {
+    processOpenMdFile(pendingFileOpen);
+    pendingFileOpen = null;
+  }
 }
 
 // ====== .md 文件打开 ======
-function setupFileOpen() {
-  // 主进程推送的文件打开
+let pendingFileOpen = null;
+let initComplete = false;
+
+// 同步注册 IPC 监听器（避免竞态条件：主进程可能在 init() 的 await 期间发送消息）
+function setupFileOpenSync() {
   if (window.electronAPI.onOpenMdFile) {
-    window.electronAPI.onOpenMdFile(({ path: filePath, name, content }) => {
-      const existing = state.notes.find(n => n.filePath === filePath);
-      if (existing) {
-        selectNote(existing.id);
+    window.electronAPI.onOpenMdFile((data) => {
+      if (!initComplete) {
+        pendingFileOpen = data;
         return;
       }
-      const note = {
-        id: Date.now().toString(),
-        title: name,
-        body: content,
-        filePath: filePath,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      state.notes.unshift(note);
-      selectNote(note.id);
-      scheduleSave();
+      processOpenMdFile(data);
     });
   }
+}
 
+function processOpenMdFile(data) {
+  if (!data || typeof data !== 'object') return;
+  const { path: filePath, name, content } = data;
+  if (!filePath) return;
+
+  try {
+    const existing = state.notes.find(n => n.filePath === filePath);
+    if (existing) {
+      // 同步文件最新内容
+      if (content !== undefined) existing.body = content;
+      existing.updatedAt = new Date().toISOString();
+      selectNote(existing.id);
+      scheduleSave();
+      return;
+    }
+    const note = {
+      id: Date.now().toString(),
+      title: name || '未命名',
+      body: content || '',
+      filePath: filePath,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    state.notes.unshift(note);
+    selectNote(note.id);
+    scheduleSave();
+  } catch (e) {
+    console.error('QuickMemo: processOpenMdFile error:', e);
+  }
+}
+
+function setupFileOpen() {
   // 拖拽 .md 文件到窗口
   document.addEventListener('dragover', (e) => {
     e.preventDefault();
@@ -332,6 +367,7 @@ function setupContextMenu() {
           const content = MarkdownEditor.getContent(bodyContainer);
           MarkdownEditor.destroy();
           MarkdownEditor.init(bodyContainer, content, note.markdownEnabled);
+          registerEditorCallbacks();
         }
         renderSidebar();
       }
@@ -551,17 +587,8 @@ function renderEditor(id) {
   const useMarkdown = isMarkdownEnabledForNote(note);
   MarkdownEditor.init(bodyContainer, note.body || '', useMarkdown);
 
-  // 重置滚动到底按钮状态
-  const btnScrollBottom = document.getElementById('btn-scroll-bottom');
-  if (btnScrollBottom) {
-    btnScrollBottom.classList.remove('visible');
-    requestAnimationFrame(() => {
-      const scrollTarget = MarkdownEditor.getScrollTarget(bodyContainer);
-      if (scrollTarget && scrollTarget.scrollHeight > scrollTarget.clientHeight + 10) {
-        btnScrollBottom.classList.add('visible');
-      }
-    });
-  }
+  // 每次切换笔记后重新注册编辑器回调（因为 DOM 已被替换）
+  registerEditorCallbacks();
 
   const reminder = state.reminders.find(r => r.noteId === id && !r.done);
   const badge = document.getElementById('reminder-badge');
@@ -601,6 +628,67 @@ function setupNewNote() {
   });
 }
 
+// 自动生成标题（从正文第一行）
+function autoTitle(note) {
+  const isDefault = !note.title || note.title === '新笔记' || note.title === '未命名';
+  if (!isDefault) return;
+  if (!note.body) return;
+  const firstLine = note.body.split('\n')[0].trim();
+  if (firstLine && firstLine.length >= 3 && firstLine.length <= 60) {
+    note.title = firstLine;
+    document.getElementById('note-title').value = firstLine;
+    updateSidebarItem(note.id, firstLine);
+    scheduleSave();
+  }
+}
+
+// 编辑器内容变更回调（每次重新 init 后需重新注册）
+function registerEditorCallbacks() {
+  const bodyContainer = document.getElementById('note-body-container');
+  if (!bodyContainer) return;
+  MarkdownEditor.onChange(bodyContainer, () => {
+    const note = state.notes.find(n => n.id === state.selectedId);
+    if (!note) return;
+    note.body = MarkdownEditor.getContent(bodyContainer);
+    autoTitle(note);
+    scheduleSave();
+  });
+
+  // 滚动到底按钮 — 重新附着滚动监听
+  const btnScrollBottom = document.getElementById('btn-scroll-bottom');
+  if (!btnScrollBottom) return;
+  const getScrollEl = () => MarkdownEditor.getScrollTarget(bodyContainer);
+
+  // 移除旧监听（如果存在）
+  if (btnScrollBottom._scrollHandler) {
+    const oldEl = getScrollEl();
+    if (oldEl) oldEl.removeEventListener('scroll', btnScrollBottom._scrollHandler);
+  }
+
+  const attachScroll = () => {
+    const scrollEl = getScrollEl();
+    if (!scrollEl) return;
+    btnScrollBottom._scrollHandler = () => {
+      const threshold = 50;
+      const atBottom = scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - threshold;
+      const scrollable = scrollEl.scrollHeight > scrollEl.clientHeight + 10;
+      btnScrollBottom.classList.toggle('visible', scrollable && !atBottom);
+    };
+    scrollEl.addEventListener('scroll', btnScrollBottom._scrollHandler);
+    // 初始检测
+    btnScrollBottom._scrollHandler();
+    btnScrollBottom.classList.remove('visible');
+    requestAnimationFrame(() => {
+      const st = getScrollEl();
+      if (st && st.scrollHeight > st.clientHeight + 10) {
+        btnScrollBottom.classList.add('visible');
+      }
+    });
+  };
+  // 延迟附加滚动监听，等编辑器渲染完成
+  setTimeout(attachScroll, 300);
+}
+
 function setupEditor() {
   const title = document.getElementById('note-title');
 
@@ -608,28 +696,6 @@ function setupEditor() {
     const note = state.notes.find(n => n.id === state.selectedId);
     if (!note || note.notemsKey) return;
     note.title = title.value || '未命名'; scheduleSave(); updateSidebarItem(note.id, note.title);
-  });
-
-  function autoTitle(note) {
-    const isDefault = !note.title || note.title === '新笔记' || note.title === '未命名';
-    if (!isDefault) return;
-    const firstLine = note.body.split('\n')[0].trim();
-    if (firstLine && firstLine.length >= 3 && firstLine.length <= 60) {
-      note.title = firstLine;
-      document.getElementById('note-title').value = firstLine;
-      updateSidebarItem(note.id, firstLine);
-      scheduleSave();
-    }
-  }
-
-  // 使用 MarkdownEditor 统一的内容变更回调
-  const bodyContainer = document.getElementById('note-body-container');
-  MarkdownEditor.onChange(bodyContainer, () => {
-    const note = state.notes.find(n => n.id === state.selectedId);
-    if (!note) return;
-    note.body = MarkdownEditor.getContent(bodyContainer);
-    autoTitle(note);  // 自动生成标题
-    scheduleSave();
   });
   // Ctrl+S 保存（监听 document，兼容 WYSIWYG 和纯文本模式）
   document.addEventListener('keydown', (e) => {
@@ -657,38 +723,12 @@ function setupEditor() {
     });
   });
 
-  // ====== 滚动到底按钮 ======
+  // ====== 滚动到底按钮点击（按钮是静态的，只需注册一次） ======
   const btnScrollBottom = document.getElementById('btn-scroll-bottom');
   if (btnScrollBottom) {
-    const bodyContainer = document.getElementById('note-body-container');
-    const getScrollEl = () => MarkdownEditor.getScrollTarget(bodyContainer);
-
-    // 使用全局滚动监听（因为是动态滚动容器）
-    let scrollHandler = null;
-    const attachScroll = () => {
-      const scrollEl = getScrollEl();
-      if (scrollEl && !scrollHandler) {
-        scrollHandler = () => {
-          const threshold = 50;
-          const atBottom = scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - threshold;
-          const scrollable = scrollEl.scrollHeight > scrollEl.clientHeight + 10;
-          if (scrollable && !atBottom) {
-            btnScrollBottom.classList.add('visible');
-          } else {
-            btnScrollBottom.classList.remove('visible');
-          }
-        };
-        scrollEl.addEventListener('scroll', scrollHandler);
-        // 初始检测
-        scrollHandler();
-      }
-    };
-
-    // 延迟附加滚动监听，等编辑器渲染完成
-    setTimeout(attachScroll, 300);
-
     btnScrollBottom.addEventListener('click', () => {
-      const scrollEl = getScrollEl();
+      const bodyContainer = document.getElementById('note-body-container');
+      const scrollEl = MarkdownEditor.getScrollTarget(bodyContainer);
       if (scrollEl) {
         scrollEl.scrollTo({ top: scrollEl.scrollHeight, behavior: 'smooth' });
       }
@@ -1168,6 +1208,7 @@ function setupSettings() {
         const content = MarkdownEditor.getContent(bodyContainer);
         MarkdownEditor.destroy();
         MarkdownEditor.init(bodyContainer, content, isMarkdownEnabledForNote(note));
+        registerEditorCallbacks();
       }
     }
   });
@@ -1184,6 +1225,7 @@ function setupSettings() {
         const content = MarkdownEditor.getContent(bodyContainer);
         MarkdownEditor.destroy();
         MarkdownEditor.init(bodyContainer, content, isMarkdownEnabledForNote(note));
+        registerEditorCallbacks();
       }
     }
   });
