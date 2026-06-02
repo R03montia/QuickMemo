@@ -175,50 +175,14 @@ function createWindow() {
     mainWindow.show();
   });
 
-  // 最大化时拖拽标题栏 → 自动还原继续拖
-  let savedBounds = { width: 800, height: 600, x: undefined, y: undefined };
-  mainWindow.on('resize', () => {
-    if (!mainWindow.isMaximized()) {
-      savedBounds = mainWindow.getBounds();
-    }
-  });
-  mainWindow.on('move', () => {
-    if (!mainWindow.isMaximized()) {
-      const b = mainWindow.getBounds();
-      savedBounds.x = b.x;
-      savedBounds.y = b.y;
-    }
-  });
-  // 拖拽最大化窗口标题栏 → 自动还原
-  let wasMaximizedOnMove = false;
-  mainWindow.on('will-move', () => {
-    if (mainWindow.isMaximized()) {
-      wasMaximizedOnMove = true;
-      mainWindow.unmaximize();
-    }
-  });
-  mainWindow.on('move', () => {
-    if (wasMaximizedOnMove) {
-      wasMaximizedOnMove = false;
-      // 取消最大化后窗口位置会跳，用鼠标位置修正
-      try {
-        const { screen } = require('electron');
-        const cursor = screen.getCursorScreenPoint();
-        const bounds = mainWindow.getBounds();
-        const titleBarY = bounds.y;
-        const relX = cursor.x - bounds.x;
-        if (relX < 0 || relX > bounds.width) {
-          // 鼠标在窗口外，居中
-          mainWindow.setBounds({
-            x: Math.round(cursor.x - bounds.width / 2),
-            y: Math.round(cursor.y - 8),
-            width: bounds.width,
-            height: bounds.height,
-          });
-        }
-      } catch {}
-    }
-  });
+  // Windows：最大化时拖拽标题栏 → hook 系统消息先还原再拖
+  if (process.platform === 'win32') {
+    mainWindow.hookWindowMessage(0x0231, () => { // WM_ENTERSIZEMOVE = 窗口即将移动/缩放
+      if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isMaximized()) {
+        mainWindow.unmaximize();
+      }
+    });
+  }
 
   // 最大化状态变化 → 通知渲染进程更新按钮图标
   const notifyMaximize = () => {
