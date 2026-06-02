@@ -1421,28 +1421,16 @@ textarea:focus-visible {
   background: transparent !important;
 }
 
-/* 暗色模式：强制透明所有 Toast UI Editor 元素 */
+/* 暗色模式：只让外层 chrome 透明，不动内容区颜色 */
 [data-theme="dark"] .toastui-editor-defaultUI,
 [data-theme="dark"] .toastui-editor-main,
 [data-theme="dark"] .toastui-editor-md-container,
 [data-theme="dark"] .toastui-editor-ww-container,
 [data-theme="dark"] .toastui-editor-mode-switch,
 [data-theme="dark"] .toastui-editor-toolbar,
-[data-theme="dark"] .toastui-editor-popup,
-[data-theme="dark"] .toastui-editor-popup-body,
-[data-theme="dark"] .toastui-editor-popup input,
 [data-theme="dark"] .toastui-editor-md-tab-style .toastui-editor-tabs,
 [data-theme="dark"] .toastui-editor-defaultUI .CodeMirror {
   background: transparent !important;
-  color: var(--text) !important;
-}
-
-[data-theme="dark"] .toastui-editor-toolbar button {
-  color: var(--text-secondary) !important;
-}
-
-[data-theme="dark"] .toastui-editor-toolbar button:hover {
-  color: var(--text) !important;
 }
 
 [data-theme="dark"] .toastui-editor-popup {
@@ -1452,35 +1440,10 @@ textarea:focus-visible {
 
 [data-theme="dark"] .toastui-editor-popup input {
   background: var(--item-hover) !important;
-  color: var(--text) !important;
   border-color: var(--border) !important;
 }
 
-/* ProseMirror 内容区覆盖 */
-[data-theme="dark"] .ProseMirror {
-  color: var(--text) !important;
-}
-
-[data-theme="dark"] .ProseMirror pre,
-[data-theme="dark"] .ProseMirror code {
-  background: rgba(255,255,255,0.06) !important;
-  color: var(--text) !important;
-}
-
-[data-theme="dark"] .ProseMirror blockquote {
-  color: var(--text-secondary) !important;
-}
-
-[data-theme="dark"] .ProseMirror table th,
-[data-theme="dark"] .ProseMirror table td {
-  border-color: var(--border) !important;
-}
-
-[data-theme="dark"] .ProseMirror a {
-  color: var(--accent) !important;
-}
-
-/* 系统深色模式（data-theme 未设置时的 fallback） */
+/* 系统深色模式 fallback */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .toastui-editor-defaultUI,
   :root:not([data-theme="light"]) .toastui-editor-main,
@@ -1489,24 +1452,6 @@ textarea:focus-visible {
   :root:not([data-theme="light"]) .toastui-editor-mode-switch,
   :root:not([data-theme="light"]) .toastui-editor-toolbar {
     background: transparent !important;
-  }
-
-  :root:not([data-theme="light"]) .toastui-editor-toolbar button {
-    color: var(--text-secondary) !important;
-  }
-
-  :root:not([data-theme="light"]) .toastui-editor-toolbar button:hover {
-    color: var(--text) !important;
-  }
-
-  :root:not([data-theme="light"]) .ProseMirror {
-    color: var(--text) !important;
-  }
-
-  :root:not([data-theme="light"]) .ProseMirror pre,
-  :root:not([data-theme="light"]) .ProseMirror code {
-    background: rgba(255,255,255,0.06) !important;
-    color: var(--text) !important;
   }
 }
 
