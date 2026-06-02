@@ -1539,6 +1539,37 @@ textarea:focus-visible {
   border-bottom-color: var(--border) !important;
 }
 
+/* ====== 暗色模式：提高 active/selected 的 accent 混合比例 ====== */
+/* 默认 10-15% 在暗背景上太暗看不清，提到 20-25% */
+
+[data-theme="dark"] .settings-nav-item.active {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+[data-theme="dark"] .settings-option.active {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+[data-theme="dark"] .note-item.active {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+[data-theme="dark"] .note-item.multi-selected {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+[data-theme="dark"] .context-menu-item:hover {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+[data-theme="dark"] #multi-toolbar {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+[data-theme="dark"] .toastui-editor-toolbar button.active {
+  background-color: color-mix(in srgb, var(--accent) 28%, transparent) !important;
+}
+
 /* ====== Toggle 开关 ====== */
 .editor-toggle-item {
   display: flex;
