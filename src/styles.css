@@ -56,7 +56,7 @@
 :root[data-theme="dark"] .note-item.active,
 :root:not([data-theme="light"]) .note-item.active {
   border-left-color: #0078d4;
-  background: color-mix(in srgb, #0078d4 38%, transparent);
+  background: color-mix(in srgb, #0078d4 50%, transparent);
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -534,7 +534,7 @@ textarea:focus-visible {
 
 :root[data-theme="dark"] .note-item.multi-selected,
 :root:not([data-theme="light"]) .note-item.multi-selected {
-  background: color-mix(in srgb, #0078d4 42%, transparent);
+  background: color-mix(in srgb, #0078d4 55%, transparent);
   outline-color: #0078d4;
 }
 
@@ -1542,23 +1542,23 @@ textarea:focus-visible {
 /* ====== 暗色模式：active/selected 使用明显的强调色调 ====== */
 
 [data-theme="dark"] .settings-nav-item.active {
-  background: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 [data-theme="dark"] .settings-option.active {
-  background: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 [data-theme="dark"] .context-menu-item:hover {
-  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 50%, transparent);
 }
 
 [data-theme="dark"] #multi-toolbar {
-  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 [data-theme="dark"] .toastui-editor-toolbar button.active {
-  background-color: color-mix(in srgb, var(--accent) 40%, transparent) !important;
+  background-color: color-mix(in srgb, var(--accent) 50%, transparent) !important;
 }
 
 /* ====== Toggle 开关 ====== */
