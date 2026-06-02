@@ -55,8 +55,8 @@
 }
 :root[data-theme="dark"] .note-item.active,
 :root:not([data-theme="light"]) .note-item.active {
-  border-left-color: #0078d4;
-  background: color-mix(in srgb, #0078d4 50%, transparent);
+  border-left-color: #60a5fa;
+  background: rgba(96, 165, 250, 0.22);
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -534,8 +534,8 @@ textarea:focus-visible {
 
 :root[data-theme="dark"] .note-item.multi-selected,
 :root:not([data-theme="light"]) .note-item.multi-selected {
-  background: color-mix(in srgb, #0078d4 55%, transparent);
-  outline-color: #0078d4;
+  background: rgba(96, 165, 250, 0.32);
+  outline-color: #60a5fa;
 }
 
 .context-menu-item.context-menu-danger {
@@ -1539,26 +1539,26 @@ textarea:focus-visible {
   border-bottom-color: var(--border) !important;
 }
 
-/* ====== 暗色模式：active/selected 使用明显的强调色调 ====== */
+/* ====== 暗色模式：active/selected 使用半透明强调色 ====== */
 
 [data-theme="dark"] .settings-nav-item.active {
-  background: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: rgba(96, 165, 250, 0.28);
 }
 
 [data-theme="dark"] .settings-option.active {
-  background: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: rgba(96, 165, 250, 0.28);
 }
 
 [data-theme="dark"] .context-menu-item:hover {
-  background: color-mix(in srgb, var(--accent) 50%, transparent);
+  background: rgba(96, 165, 250, 0.22);
 }
 
 [data-theme="dark"] #multi-toolbar {
-  background: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: rgba(96, 165, 250, 0.18);
 }
 
 [data-theme="dark"] .toastui-editor-toolbar button.active {
-  background-color: color-mix(in srgb, var(--accent) 50%, transparent) !important;
+  background-color: rgba(96, 165, 250, 0.28) !important;
 }
 
 /* ====== Toggle 开关 ====== */
