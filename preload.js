@@ -25,6 +25,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onMaximizeChanged: (cb) => {
     ipcRenderer.on('maximize-changed', (_, maximized) => cb(maximized));
   },
+  getShortcut: () => ipcRenderer.invoke('get-shortcut'),
+  setShortcut: (acc) => ipcRenderer.invoke('set-shortcut', acc),
+  onShortcutChanged: (cb) => {
+    ipcRenderer.on('shortcut-changed', (_, acc) => cb(acc));
+  },
   getPanelAlpha: () => ipcRenderer.invoke('get-panel-alpha'),
   setPanelAlpha: (alpha) => ipcRenderer.invoke('set-panel-alpha', alpha),
   getNotemsContent: (key) => ipcRenderer.invoke('notems-get', key),

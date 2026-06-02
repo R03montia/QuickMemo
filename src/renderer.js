@@ -950,6 +950,84 @@ function setupSettings() {
       document.getElementById('toggle-md-global').checked = settings.markdownEnabled !== false;
       document.getElementById('toggle-md-notems').checked = settings.notemsMarkdownEnabled === true;
     }
+    if (section === 'shortcut') {
+      loadShortcutInput();
+    }
+  }
+
+  // ====== 快捷键设置 ======
+  let shortcutKeys = [];
+
+  async function loadShortcutInput() {
+    const input = document.getElementById('shortcut-input');
+    const status = document.getElementById('shortcut-status');
+    if (!input) return;
+    try {
+      const acc = await window.electronAPI.getShortcut();
+      // 显示格式：CommandOrControl+Shift+K → Ctrl+Shift+K
+      input.value = acc
+        .replace('CommandOrControl', 'Ctrl')
+        .replace('Command', 'Cmd')
+        .replace('+', ' + ');
+      if (status) status.textContent = '点击输入框后按下新快捷键组合';
+    } catch (e) {
+      input.value = '加载失败';
+    }
+  }
+
+  function keysToDisplay(keys) {
+    return keys
+      .map(k => {
+        if (k === 'CommandOrControl') return 'Ctrl';
+        return k.length === 1 ? k.toUpperCase() : k;
+      })
+      .join(' + ');
+  }
+
+  function keysToAccelerator(keys) {
+    return keys.join('+');
+  }
+
+  const shortcutInput = document.getElementById('shortcut-input');
+  if (shortcutInput) {
+    shortcutInput.addEventListener('keydown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      shortcutKeys = [];
+      if (e.ctrlKey || e.metaKey) shortcutKeys.push('CommandOrControl');
+      if (e.altKey) shortcutKeys.push('Alt');
+      if (e.shiftKey) shortcutKeys.push('Shift');
+      const key = e.key;
+      // 忽略纯修饰键
+      if (key === 'Control' || key === 'Alt' || key === 'Shift' || key === 'Meta') return;
+      shortcutKeys.push(key.length === 1 ? key.toUpperCase() : key);
+      shortcutInput.value = keysToDisplay(shortcutKeys);
+    });
+
+    shortcutInput.addEventListener('focus', () => {
+      shortcutKeys = [];
+      shortcutInput.value = '';
+    });
+  }
+
+  const btnSaveShortcut = document.getElementById('btn-save-shortcut');
+  if (btnSaveShortcut) {
+    btnSaveShortcut.addEventListener('click', async () => {
+      const input = document.getElementById('shortcut-input');
+      const status = document.getElementById('shortcut-status');
+      if (!shortcutKeys.length || !input.value.trim()) {
+        if (status) status.textContent = '请先点击输入框并按下快捷键组合';
+        return;
+      }
+      const acc = keysToAccelerator(shortcutKeys);
+      const ok = await window.electronAPI.setShortcut(acc);
+      if (ok) {
+        if (status) status.textContent = '✓ 已保存：' + keysToDisplay(shortcutKeys);
+        input.value = keysToDisplay(shortcutKeys);
+      } else {
+        if (status) status.textContent = '✗ 注册失败，请尝试其他组合';
+      }
+    });
   }
 
   // ⚙ 切换设置
