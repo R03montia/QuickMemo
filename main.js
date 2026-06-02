@@ -1,8 +1,9 @@
-const { app, BrowserWindow, ipcMain, Notification, nativeTheme, systemPreferences, Tray, Menu, nativeImage, net } = require('electron');
+const { app, BrowserWindow, ipcMain, Notification, nativeTheme, systemPreferences, Tray, Menu, nativeImage, net, globalShortcut } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
 const DATA_FILE = path.join(__dirname, 'data', 'notes.json');
+const DEFAULT_SHORTCUT = 'CommandOrControl+Shift+Q';
 let mainWindow = null;
 let tray = null;
 let reminderTimers = new Map();
@@ -64,6 +65,37 @@ function scheduleReminders() {
       }, delay);
       reminderTimers.set(reminder.id, timer);
     }
+  }
+}
+
+// ====== 全局快捷键 ======
+function getShortcut() {
+  const data = readData();
+  return (data.settings && data.settings.shortcut) || DEFAULT_SHORTCUT;
+}
+
+function registerGlobalShortcut(accelerator) {
+  globalShortcut.unregisterAll();
+  try {
+    const ok = globalShortcut.register(accelerator, () => {
+      toggleWindow();
+    });
+    if (!ok) {
+      console.warn('QuickMemo: failed to register shortcut', accelerator);
+    }
+  } catch (e) {
+    console.warn('QuickMemo: shortcut registration error', e.message);
+  }
+}
+
+function setShortcut(accelerator) {
+  const d = readData();
+  d.settings = d.settings || {};
+  d.settings.shortcut = accelerator;
+  writeData(d);
+  registerGlobalShortcut(accelerator);
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('shortcut-changed', accelerator);
   }
 }
 
@@ -210,7 +242,10 @@ function createWindow() {
 // ====== 应用生命周期 ======
 app.isQuitting = false;
 
-app.on('before-quit', () => { app.isQuitting = true; });
+app.on('before-quit', () => {
+  app.isQuitting = true;
+  globalShortcut.unregisterAll();
+});
 
 const gotTheLock = app.requestSingleInstanceLock();
 
@@ -233,6 +268,9 @@ if (!gotTheLock) {
     createWindow();
     createTray();
     scheduleReminders();
+
+    // 注册全局快捷键
+    registerGlobalShortcut(getShortcut());
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -278,6 +316,11 @@ ipcMain.handle('maximize-window', () => {
 ipcMain.handle('unmaximize-window', () => mainWindow?.unmaximize());
 ipcMain.handle('is-maximized', () => mainWindow?.isMaximized() ?? false);
 ipcMain.handle('close-window', () => mainWindow?.hide());
+ipcMain.handle('get-shortcut', () => getShortcut());
+ipcMain.handle('set-shortcut', (_, accelerator) => {
+  try { setShortcut(accelerator); return true; }
+  catch (e) { return false; }
+});
 ipcMain.handle('get-window-bounds', () => {
   if (!mainWindow || mainWindow.isDestroyed()) return null;
   return mainWindow.getBounds();

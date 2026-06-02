@@ -1552,6 +1552,26 @@ textarea:focus-visible {
   background-color: rgba(96, 165, 250, 0.28) !important;
 }
 
+/* ====== 快捷键输入框 ====== */
+.shortcut-input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--item-hover);
+  color: var(--text);
+  font-size: 15px;
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  text-align: center;
+  outline: none;
+  cursor: pointer;
+  transition: border-color var(--transition);
+}
+.shortcut-input:focus {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
 /* ====== Toggle 开关 ====== */
 .editor-toggle-item {
   display: flex;

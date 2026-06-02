@@ -55,6 +55,7 @@
         <div class="settings-nav-item" data-section="appearance">窗口样式</div>
         <div class="settings-nav-item" data-section="opacity">不透明度</div>
         <div class="settings-nav-item" data-section="editor">编辑器</div>
+        <div class="settings-nav-item" data-section="shortcut">快捷键</div>
       </div>
       <div id="slider-panel"></div>
       <button id="btn-settings" title="设置">⚙</button>
@@ -126,6 +127,19 @@
                 <span class="toggle-slider"></span>
               </label>
             </div>
+          </div>
+        </div>
+        <div id="section-shortcut" class="settings-page" style="display:none;">
+          <div class="settings-page-header">快捷键</div>
+          <div class="settings-page-body">
+            <p style="color:var(--text-secondary);font-size:13px;margin-bottom:14px;">
+              设置全局快捷键，在任何应用中按下即可弹出 / 隐藏 QuickMemo 窗口。
+            </p>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <input type="text" id="shortcut-input" class="shortcut-input" placeholder="点击后按下快捷键组合" readonly>
+              <button id="btn-save-shortcut" class="picker-primary" style="flex-shrink:0;">保存</button>
+            </div>
+            <p id="shortcut-status" style="color:var(--text-secondary);font-size:12px;margin-top:6px;"></p>
           </div>
         </div>
       </div>
