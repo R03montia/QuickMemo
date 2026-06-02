@@ -175,9 +175,16 @@ function createWindow() {
     mainWindow.show();
   });
 
-  // Windows：最大化时拖拽标题栏 → hook 系统消息先还原再拖
+  // Windows：最大化时拖拽标题栏 → hook 系统消息先还原
   if (process.platform === 'win32') {
-    mainWindow.hookWindowMessage(0x0231, () => { // WM_ENTERSIZEMOVE = 窗口即将移动/缩放
+    // SC_MOVE：拖拽开始时的系统命令
+    mainWindow.hookWindowMessage(0x0112, (wParam) => { // WM_SYSCOMMAND
+      if ((wParam & 0xFFF0) === 0xF010 && mainWindow && !mainWindow.isDestroyed() && mainWindow.isMaximized()) {
+        mainWindow.unmaximize();
+      }
+    });
+    // 备用：非客户区左键按下时也尝试还原
+    mainWindow.hookWindowMessage(0x00A1, () => { // WM_NCLBUTTONDOWN
       if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isMaximized()) {
         mainWindow.unmaximize();
       }
