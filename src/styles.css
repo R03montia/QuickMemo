@@ -1078,6 +1078,55 @@ textarea:focus-visible {
   border-width: 1px;
 }
 
+/* ====== 滚动到底按钮 ====== */
+#btn-scroll-bottom {
+  -webkit-app-region: no-drag;
+  position: absolute;
+  bottom: 52px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--main-bg);
+  backdrop-filter: blur(var(--blur-amount)) var(--blur-saturate) var(--blur-brightness);
+  -webkit-backdrop-filter: blur(var(--blur-amount)) var(--blur-saturate) var(--blur-brightness);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow);
+  z-index: 10;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 0.2s, transform 0.2s, background var(--transition), color var(--transition);
+}
+
+#btn-scroll-bottom.visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+#btn-scroll-bottom svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+}
+
+#btn-scroll-bottom:hover {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+#btn-scroll-bottom:active {
+  transform: scale(0.93);
+}
+
 #note-footer {
   padding: 8px 20px;
   border-top: 1px solid var(--border);
@@ -1266,4 +1315,259 @@ textarea:focus-visible {
   gap: 8px;
   padding: 12px 16px;
   border-top: 1px solid var(--border);
+}
+
+/* ====== 纯文本模式 textarea ====== */
+.plain-textarea {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 14px 20px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+  outline: none;
+  resize: none;
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Courier New', monospace;
+  width: 100%;
+  height: 100%;
+}
+
+.plain-textarea::placeholder { color: var(--text-secondary); }
+.plain-textarea::-webkit-scrollbar { width: 8px; }
+.plain-textarea::-webkit-scrollbar-track { background: transparent; margin: 4px 0; }
+.plain-textarea::-webkit-scrollbar-thumb {
+  background: var(--scrollbar);
+  border-radius: 4px;
+  min-height: 40px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  transition: background 0.2s;
+}
+.plain-textarea::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+  border-width: 1px;
+}
+
+/* ====== 编辑器容器 ====== */
+#note-body-container {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ====== Toast UI Editor Win11 主题覆盖 ====== */
+
+/* 编辑器内部字体 */
+.toastui-editor-contents,
+.toastui-editor-contents * {
+  font-family: var(--font) !important;
+}
+
+/* 工具栏适配 */
+.toastui-editor-toolbar {
+  background: transparent !important;
+  border-bottom: 1px solid var(--border) !important;
+  padding: 2px 8px !important;
+}
+
+.toastui-editor-toolbar button {
+  border-radius: var(--radius-sm) !important;
+  transition: background var(--transition) !important;
+}
+
+.toastui-editor-toolbar button:hover {
+  background: var(--item-hover) !important;
+}
+
+.toastui-editor-toolbar button.active {
+  background: color-mix(in srgb, var(--accent) 15%, transparent) !important;
+  color: var(--accent) !important;
+}
+
+/* 工具栏分隔线 */
+.toastui-editor-toolbar .toolbar-divider {
+  border-color: var(--border) !important;
+}
+
+/* 编辑区背景和文字 */
+.toastui-editor-main {
+  background: transparent !important;
+}
+
+.toastui-editor-md-container,
+.toastui-editor-ww-container {
+  background: transparent !important;
+}
+
+.ProseMirror {
+  padding: 14px 20px !important;
+  color: var(--text) !important;
+  font-size: 14px !important;
+  line-height: 1.6 !important;
+  min-height: 100%;
+}
+
+.ProseMirror:focus {
+  outline: none !important;
+}
+
+/* placeholder */
+.ProseMirror p.is-editor-empty:first-child::before {
+  color: var(--text-secondary) !important;
+  font-style: italic;
+}
+
+/* 弹出层（链接编辑、表格控制等） */
+.toastui-editor-popup {
+  background: var(--main-bg) !important;
+  backdrop-filter: blur(var(--blur-amount)) var(--blur-saturate) var(--blur-brightness) !important;
+  -webkit-backdrop-filter: blur(var(--blur-amount)) var(--blur-saturate) var(--blur-brightness) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius) !important;
+  box-shadow: var(--shadow-lg) !important;
+  color: var(--text) !important;
+}
+
+.toastui-editor-popup input {
+  background: var(--item-hover) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-sm) !important;
+  color: var(--text) !important;
+}
+
+.toastui-editor-popup button {
+  border-radius: var(--radius-sm) !important;
+}
+
+/* 代码块 */
+.toastui-editor-contents pre,
+.ProseMirror pre {
+  background: color-mix(in srgb, var(--text) 6%, transparent) !important;
+  border-radius: var(--radius-sm) !important;
+  border: 1px solid var(--border) !important;
+}
+
+/* 表格 */
+.toastui-editor-contents table,
+.ProseMirror table {
+  border-color: var(--border) !important;
+}
+
+.toastui-editor-contents th,
+.toastui-editor-contents td,
+.ProseMirror th,
+.ProseMirror td {
+  border-color: var(--border) !important;
+}
+
+/* 引用块 */
+.toastui-editor-contents blockquote,
+.ProseMirror blockquote {
+  border-left-color: var(--accent) !important;
+  color: var(--text-secondary) !important;
+}
+
+/* Toast UI Editor 内部滚动条 */
+.toastui-editor-main .toastui-editor-ww-container::-webkit-scrollbar,
+.toastui-editor-main .toastui-editor-md-container::-webkit-scrollbar {
+  width: 8px;
+}
+.toastui-editor-main .toastui-editor-ww-container::-webkit-scrollbar-track,
+.toastui-editor-main .toastui-editor-md-container::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 4px 0;
+}
+.toastui-editor-main .toastui-editor-ww-container::-webkit-scrollbar-thumb,
+.toastui-editor-main .toastui-editor-md-container::-webkit-scrollbar-thumb {
+  background: var(--scrollbar);
+  border-radius: 4px;
+  min-height: 40px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.toastui-editor-main .toastui-editor-ww-container::-webkit-scrollbar-thumb:hover,
+.toastui-editor-main .toastui-editor-md-container::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+  border-width: 1px;
+}
+
+/* ====== Toggle 开关 ====== */
+.editor-toggle-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.editor-toggle-label {
+  flex: 1;
+}
+
+.editor-toggle-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  display: block;
+}
+
+.editor-toggle-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 3px;
+  display: block;
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--item-active);
+  border-radius: 22px;
+  transition: background var(--transition);
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  bottom: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform var(--transition);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background: var(--accent);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(18px);
+}
+
+.toggle-switch input:focus-visible + .toggle-slider {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }

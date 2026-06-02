@@ -13,6 +13,13 @@ const SVG = {
 
 let state = { notes: [], reminders: [], selectedId: null, multiSelected: new Set(), multiMode: false };
 let saveTimer = null;
+let settings = { markdownEnabled: true, notemsMarkdownEnabled: false, theme: 'system', appearance: 'bordered', panelAlpha: 82 };
+
+function isMarkdownEnabledForNote(note) {
+  if (note.markdownEnabled !== undefined) return note.markdownEnabled;
+  if (note.notemsKey) return settings.notemsMarkdownEnabled !== false;
+  return settings.markdownEnabled !== false;
+}
 let calDate = new Date();
 let selectedDate = new Date();
 let selectedHour = 0;
@@ -40,6 +47,9 @@ async function init() {
   const data = await window.electronAPI.loadData();
   state.notes = data.notes || [];
   state.reminders = data.reminders || [];
+  if (data.settings) {
+    settings = Object.assign(settings, data.settings);
+  }
 
   renderSidebar();
   if (state.notes.length > 0) selectNote(state.notes[0].id);
@@ -158,6 +168,19 @@ function showContextMenu(e, noteId) {
   html += `<div class="context-menu-item" data-action="mul-sel">${SVG.checkbox}多选</div>`;
   html += `<div class="context-menu-separator"></div>`;
   html += `<div class="context-menu-item" data-action="rename">${SVG.pen}重命名</div>`;
+
+  // Markdown 开关
+  const note = state.notes.find(n => n.id === noteId);
+  if (note) {
+    const mdEnabled = isMarkdownEnabledForNote(note);
+    html += `<div class="context-menu-separator"></div>`;
+    if (mdEnabled) {
+      html += `<div class="context-menu-item" data-action="md-disable">${SVG.notems}关闭 Markdown</div>`;
+    } else {
+      html += `<div class="context-menu-item" data-action="md-enable">${SVG.notems}启用 Markdown</div>`;
+    }
+  }
+
   html += `<div class="context-menu-separator"></div>`;
   html += `<div class="context-menu-item" data-action="delete">${SVG.trash}删除</div>`;
   menu.innerHTML = html;
@@ -181,6 +204,22 @@ function setupContextMenu() {
     const action = actionItem.dataset.action;
     const targetId = contextTargetId;
     hideContextMenu();
+    if (action === 'md-enable' || action === 'md-disable') {
+      const note = state.notes.find(n => n.id === targetId);
+      if (note) {
+        note.markdownEnabled = action === 'md-enable';
+        scheduleSave();
+        // 如果切换的是当前选中的笔记，即时重建编辑器
+        if (state.selectedId === targetId) {
+          const bodyContainer = document.getElementById('note-body-container');
+          const content = MarkdownEditor.getContent(bodyContainer);
+          MarkdownEditor.destroy();
+          MarkdownEditor.init(bodyContainer, content, note.markdownEnabled);
+        }
+        renderSidebar();
+      }
+      return;
+    }
     if (action === 'mul-sel') enterMultiSelect(targetId);
     else if (action === 'rename') {
       const n = state.notes.find(x => x.id === targetId);
@@ -374,7 +413,24 @@ function renderEditor(id) {
   titleEl.value = note.title || '';
   titleEl.readOnly = !!note.notemsKey;
   titleEl.style.cursor = note.notemsKey ? 'default' : '';
-  document.getElementById('note-body').value = note.body || '';
+  // 销毁旧编辑器实例
+  MarkdownEditor.destroy();
+
+  const bodyContainer = document.getElementById('note-body-container');
+  const useMarkdown = isMarkdownEnabledForNote(note);
+  MarkdownEditor.init(bodyContainer, note.body || '', useMarkdown);
+
+  // 重置滚动到底按钮状态
+  const btnScrollBottom = document.getElementById('btn-scroll-bottom');
+  if (btnScrollBottom) {
+    btnScrollBottom.classList.remove('visible');
+    requestAnimationFrame(() => {
+      const scrollTarget = MarkdownEditor.getScrollTarget(bodyContainer);
+      if (scrollTarget && scrollTarget.scrollHeight > scrollTarget.clientHeight + 10) {
+        btnScrollBottom.classList.add('visible');
+      }
+    });
+  }
 
   const reminder = state.reminders.find(r => r.noteId === id && !r.done);
   const badge = document.getElementById('reminder-badge');
@@ -416,7 +472,6 @@ function setupNewNote() {
 
 function setupEditor() {
   const title = document.getElementById('note-title');
-  const body = document.getElementById('note-body');
 
   title.addEventListener('input', () => {
     const note = state.notes.find(n => n.id === state.selectedId);
@@ -436,36 +491,78 @@ function setupEditor() {
     }
   }
 
-  body.addEventListener('input', () => {
+  // 使用 MarkdownEditor 统一的内容变更回调
+  const bodyContainer = document.getElementById('note-body-container');
+  MarkdownEditor.onChange(bodyContainer, () => {
     const note = state.notes.find(n => n.id === state.selectedId);
     if (!note) return;
-    note.body = body.value;
+    note.body = MarkdownEditor.getContent(bodyContainer);
+    autoTitle(note);  // 自动生成标题
     scheduleSave();
   });
-  body.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-      e.preventDefault();
-      clearTimeout(saveTimer);
-      const status = document.getElementById('note-status');
-      if (status) status.textContent = '保存中…';
-      const note = state.notes.find(n => n.id === state.selectedId);
-      // 先存本地
-      window.electronAPI.saveData({ notes: state.notes, reminders: state.reminders.filter(r => !r.done) }).then(() => {
-        if (status) status.textContent = '已保存';
-        // 如果有 note.ms 关联，同步上传
-        if (note && note.notemsKey) {
-          window.electronAPI.setNotemsContent(note.notemsKey, note.body).then(ok => {
-            if (ok) { if (status) status.textContent = '已同步到 note.ms'; }
-            else { if (status) status.textContent = 'note.ms 同步失败'; }
-          });
-        }
-      });
-    }
-    if (e.key === 'Enter') { const note = state.notes.find(n => n.id === state.selectedId); if (note) autoTitle(note); }
+  // Ctrl+S 保存（监听 document，兼容 WYSIWYG 和纯文本模式）
+  document.addEventListener('keydown', (e) => {
+    if (!((e.ctrlKey || e.metaKey) && e.key === 's')) return;
+    if (!state.selectedId) return;
+    // 确保当前焦点在编辑器区域内
+    const editor = document.getElementById('note-editor');
+    if (!editor || editor.style.display === 'none') return;
+
+    e.preventDefault();
+    clearTimeout(saveTimer);
+    const status = document.getElementById('note-status');
+    if (status) status.textContent = '保存中…';
+    const note = state.notes.find(n => n.id === state.selectedId);
+    const bodyContainer = document.getElementById('note-body-container');
+    if (note && bodyContainer) note.body = MarkdownEditor.getContent(bodyContainer);
+    window.electronAPI.saveData({ notes: state.notes, reminders: state.reminders.filter(r => !r.done) }).then(() => {
+      if (status) status.textContent = '已保存';
+      if (note && note.notemsKey) {
+        window.electronAPI.setNotemsContent(note.notemsKey, note.body).then(ok => {
+          if (ok) { if (status) status.textContent = '已同步到 note.ms'; }
+          else { if (status) status.textContent = 'note.ms 同步失败'; }
+        });
+      }
+    });
   });
-  body.addEventListener('blur', () => {
-    const note = state.notes.find(n => n.id === state.selectedId); if (note) autoTitle(note);
-  });
+
+  // ====== 滚动到底按钮 ======
+  const btnScrollBottom = document.getElementById('btn-scroll-bottom');
+  if (btnScrollBottom) {
+    const bodyContainer = document.getElementById('note-body-container');
+    const getScrollEl = () => MarkdownEditor.getScrollTarget(bodyContainer);
+
+    // 使用全局滚动监听（因为是动态滚动容器）
+    let scrollHandler = null;
+    const attachScroll = () => {
+      const scrollEl = getScrollEl();
+      if (scrollEl && !scrollHandler) {
+        scrollHandler = () => {
+          const threshold = 50;
+          const atBottom = scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - threshold;
+          const scrollable = scrollEl.scrollHeight > scrollEl.clientHeight + 10;
+          if (scrollable && !atBottom) {
+            btnScrollBottom.classList.add('visible');
+          } else {
+            btnScrollBottom.classList.remove('visible');
+          }
+        };
+        scrollEl.addEventListener('scroll', scrollHandler);
+        // 初始检测
+        scrollHandler();
+      }
+    };
+
+    // 延迟附加滚动监听，等编辑器渲染完成
+    setTimeout(attachScroll, 300);
+
+    btnScrollBottom.addEventListener('click', () => {
+      const scrollEl = getScrollEl();
+      if (scrollEl) {
+        scrollEl.scrollTo({ top: scrollEl.scrollHeight, behavior: 'smooth' });
+      }
+    });
+  }
 
   // ====== 提醒按钮 ======
   const btnReminder = document.getElementById('btn-reminder');
@@ -540,7 +637,7 @@ function setupEditor() {
       const note = state.notes.find(n => n.id === state.selectedId);
       if (note) {
         note.body = content;
-        document.getElementById('note-body').value = content;
+        MarkdownEditor.setContent(document.getElementById('note-body-container'), content);
         scheduleSave();
       }
     }
@@ -738,6 +835,12 @@ function applyPanelAlpha(percent) {
 // ====== 设置面板 ======
 let settingsOpen = false;
 
+async function updateStoredSettings() {
+  const data = await window.electronAPI.loadData();
+  data.settings = Object.assign(data.settings || {}, settings);
+  await window.electronAPI.saveData(data);
+}
+
 function setupSettings() {
   const sidebarHeader = document.getElementById('sidebar-header');
   const noteList = document.getElementById('note-list');
@@ -787,6 +890,10 @@ function setupSettings() {
       const sl = document.getElementById('settings-opacity-value');
       if (sr) { sr.value = currentPanelAlpha; sl.textContent = currentPanelAlpha + '%'; }
     }
+    if (section === 'editor') {
+      document.getElementById('toggle-md-global').checked = settings.markdownEnabled !== false;
+      document.getElementById('toggle-md-notems').checked = settings.notemsMarkdownEnabled === true;
+    }
   }
 
   // ⚙ 切换设置
@@ -832,6 +939,38 @@ function setupSettings() {
       window.electronAPI.setPanelAlpha(currentPanelAlpha);
     });
   }
+
+  // Markdown 全局开关
+  document.getElementById('toggle-md-global').addEventListener('change', function () {
+    settings.markdownEnabled = this.checked;
+    updateStoredSettings();
+    // 如果当前打开的普通笔记无显式覆盖，即时重建编辑器
+    const note = state.notes.find(n => n.id === state.selectedId);
+    if (note && !note.notemsKey && note.markdownEnabled === undefined) {
+      const bodyContainer = document.getElementById('note-body-container');
+      if (bodyContainer) {
+        const content = MarkdownEditor.getContent(bodyContainer);
+        MarkdownEditor.destroy();
+        MarkdownEditor.init(bodyContainer, content, isMarkdownEnabledForNote(note));
+      }
+    }
+  });
+
+  // Notems Markdown 开关
+  document.getElementById('toggle-md-notems').addEventListener('change', function () {
+    settings.notemsMarkdownEnabled = this.checked;
+    updateStoredSettings();
+    // 如果当前打开的 Notems 笔记无显式覆盖，即时重建编辑器
+    const note = state.notes.find(n => n.id === state.selectedId);
+    if (note && note.notemsKey && note.markdownEnabled === undefined) {
+      const bodyContainer = document.getElementById('note-body-container');
+      if (bodyContainer) {
+        const content = MarkdownEditor.getContent(bodyContainer);
+        MarkdownEditor.destroy();
+        MarkdownEditor.init(bodyContainer, content, isMarkdownEnabledForNote(note));
+      }
+    }
+  });
 }
 
 // ====== 确认弹窗 ======

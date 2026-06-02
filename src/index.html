@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QuickMemo</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="../assets/editor/toastui-editor.min.css">
+  <link rel="stylesheet" href="../assets/editor/toastui-editor-plugin-code-syntax-highlight.min.css">
 </head>
 <body>
   <!-- 有边框模式标题栏 -->
@@ -51,6 +53,7 @@
         <div class="settings-nav-item active" data-section="theme">主题</div>
         <div class="settings-nav-item" data-section="appearance">窗口样式</div>
         <div class="settings-nav-item" data-section="opacity">不透明度</div>
+        <div class="settings-nav-item" data-section="editor">编辑器</div>
       </div>
       <div id="slider-panel"></div>
       <button id="btn-settings" title="设置">⚙</button>
@@ -96,6 +99,31 @@
             <div class="settings-slider-wrap">
               <input type="range" class="slider-input" id="settings-opacity-range" min="10" max="100" value="82">
               <span class="slider-value" id="settings-opacity-value">82%</span>
+            </div>
+          </div>
+        </div>
+        <div id="section-editor" class="settings-page" style="display:none;">
+          <div class="settings-page-header">编辑器</div>
+          <div class="settings-page-body">
+            <div class="editor-toggle-item">
+              <div class="editor-toggle-label">
+                <span class="editor-toggle-title">普通笔记 Markdown</span>
+                <span class="editor-toggle-desc">新建和编辑普通笔记时默认使用所见即所得 Markdown 编辑器</span>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="toggle-md-global" checked>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="editor-toggle-item">
+              <div class="editor-toggle-label">
+                <span class="editor-toggle-title">Notems 笔记 Markdown</span>
+                <span class="editor-toggle-desc">从 note.ms 获取的笔记也使用 Markdown 渲染</span>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="toggle-md-notems">
+                <span class="toggle-slider"></span>
+              </label>
             </div>
           </div>
         </div>
@@ -148,13 +176,19 @@
             </button>
           </div>
         </div>
-        <textarea id="note-body" placeholder="写点什么……"></textarea>
+        <div id="note-body-container"></div>
         <div id="note-footer">
           <span id="note-status">已自动保存</span>
           <button id="btn-delete-note" title="删除">
             <svg class="icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h14"/><path d="M16 6v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6"/><path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h1A1.5 1.5 0 0 1 12 4.5V6"/></svg>
           </button>
         </div>
+        <button id="btn-scroll-bottom" title="滚动到底">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 8 10 12 14 8"/>
+            <polyline points="6 12 10 16 14 12"/>
+          </svg>
+        </button>
       </div>
     </main>
   </div>
@@ -202,6 +236,9 @@
     </div>
   </div>
 
+  <script src="../assets/editor/toastui-editor-all.min.js"></script>
+  <script src="../assets/editor/toastui-editor-plugin-code-syntax-highlight-all.min.js"></script>
+  <script src="markdown-editor.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>
