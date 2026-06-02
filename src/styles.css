@@ -1421,37 +1421,78 @@ textarea:focus-visible {
   background: transparent !important;
 }
 
-/* 暗色模式：只让外层 chrome 透明，不动内容区颜色 */
+/* ====== 暗色模式：所有 toast 元素适配 ====== */
+/* 规则：外壳全部透明，内容文字跟 --text，保留编辑器内部 Markdown 语义色 */
+
 [data-theme="dark"] .toastui-editor-defaultUI,
+[data-theme="dark"] .toastui-editor-defaultUI-toolbar,
+[data-theme="dark"] .toastui-editor-toolbar,
+[data-theme="dark"] .toastui-editor-toolbar-icons,
 [data-theme="dark"] .toastui-editor-main,
+[data-theme="dark"] .toastui-editor-main-container,
 [data-theme="dark"] .toastui-editor-md-container,
 [data-theme="dark"] .toastui-editor-ww-container,
 [data-theme="dark"] .toastui-editor-mode-switch,
-[data-theme="dark"] .toastui-editor-toolbar,
 [data-theme="dark"] .toastui-editor-md-tab-style .toastui-editor-tabs,
 [data-theme="dark"] .toastui-editor-defaultUI .CodeMirror {
   background: transparent !important;
+  color: inherit !important;
+}
+
+[data-theme="dark"] .toastui-editor-dropdown-toolbar {
+  background: var(--main-bg) !important;
+  border-color: var(--border) !important;
+}
+
+[data-theme="dark"] .toastui-editor-toolbar-divider {
+  background: var(--border) !important;
+}
+
+[data-theme="dark"] .toastui-editor-defaultUI-toolbar button,
+[data-theme="dark"] .toastui-editor-toolbar button {
+  color: var(--text-secondary) !important;
+}
+
+[data-theme="dark"] .toastui-editor-defaultUI-toolbar button:hover,
+[data-theme="dark"] .toastui-editor-toolbar button:hover {
+  color: var(--text) !important;
+}
+
+[data-theme="dark"] .toastui-editor-defaultUI-toolbar button.active,
+[data-theme="dark"] .toastui-editor-toolbar button.active {
+  color: var(--accent) !important;
 }
 
 [data-theme="dark"] .toastui-editor-popup {
   background: var(--main-bg) !important;
   border-color: var(--border) !important;
+  color: var(--text) !important;
 }
 
-[data-theme="dark"] .toastui-editor-popup input {
+[data-theme="dark"] .toastui-editor-popup input,
+[data-theme="dark"] .toastui-editor-popup select {
   background: var(--item-hover) !important;
   border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+
+[data-theme="dark"] .toastui-editor-popup button {
+  color: var(--text-secondary) !important;
+}
+
+[data-theme="dark"] .toastui-editor-popup button:hover {
+  color: var(--text) !important;
 }
 
 /* 系统深色模式 fallback */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .toastui-editor-defaultUI,
+  :root:not([data-theme="light"]) .toastui-editor-toolbar,
   :root:not([data-theme="light"]) .toastui-editor-main,
-  :root:not([data-theme="light"]) .toastui-editor-md-container,
   :root:not([data-theme="light"]) .toastui-editor-ww-container,
-  :root:not([data-theme="light"]) .toastui-editor-mode-switch,
-  :root:not([data-theme="light"]) .toastui-editor-toolbar {
+  :root:not([data-theme="light"]) .toastui-editor-mode-switch {
     background: transparent !important;
+    color: inherit !important;
   }
 }
 
