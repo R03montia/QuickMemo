@@ -86,27 +86,47 @@ function applyTheme() {
 }
 
 // ====== 窗口控件（同时支持有边框和无边框） ======
+let isWindowMaximized = false;
+
+function updateMaximizeIcon() {
+  const btnBar = document.getElementById('btn-maximize-bar');
+  const btnFloat = document.getElementById('btn-maximize');
+  if (btnBar) btnBar.textContent = isWindowMaximized ? '❐' : '□';
+  if (btnFloat) {
+    btnFloat.innerHTML = isWindowMaximized
+      ? '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2" y="1.5" width="7" height="7" rx="0.5"/><rect x="3" y="3.5" width="7" height="7" rx="0.5"/></svg>'
+      : '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1.5" y="1.5" width="9" height="9" rx="1"/></svg>';
+  }
+}
+
+async function toggleMaximize() {
+  await window.electronAPI.maximize();
+  // 切换后询问主进程实际状态
+  isWindowMaximized = await window.electronAPI.isMaximized();
+  updateMaximizeIcon();
+}
+
 function setupTitlebar() {
   // 有边框标题栏按钮
   bindClick('btn-minimize-bar', () => window.electronAPI.minimize());
-  bindClick('btn-maximize-bar', () => window.electronAPI.maximize());
+  bindClick('btn-maximize-bar', () => toggleMaximize());
   bindClick('btn-close-bar', () => window.electronAPI.close());
   // 无边框浮动按钮
   bindClick('btn-minimize', () => window.electronAPI.minimize());
-  bindClick('btn-maximize', () => window.electronAPI.maximize());
+  bindClick('btn-maximize', () => toggleMaximize());
   bindClick('btn-close', () => window.electronAPI.close());
 
-  // 最大化状态变化时更新按钮图标
+  // 启动时检测一次
+  window.electronAPI.isMaximized().then(v => {
+    isWindowMaximized = v;
+    updateMaximizeIcon();
+  });
+
+  // 监听主进程通知（双击标题栏触发时）
   if (window.electronAPI.onMaximizeChanged) {
     window.electronAPI.onMaximizeChanged((maximized) => {
-      const btnBar = document.getElementById('btn-maximize-bar');
-      const btnFloat = document.getElementById('btn-maximize');
-      if (btnBar) btnBar.textContent = maximized ? '❐' : '□';
-      if (btnFloat) {
-        btnFloat.innerHTML = maximized
-          ? '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2" y="1.5" width="7" height="7" rx="0.5"/><rect x="3" y="3.5" width="7" height="7" rx="0.5"/></svg>'
-          : '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1.5" y="1.5" width="9" height="9" rx="1"/></svg>';
-      }
+      isWindowMaximized = maximized;
+      updateMaximizeIcon();
     });
   }
 }
