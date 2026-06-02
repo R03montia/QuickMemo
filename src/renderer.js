@@ -97,6 +97,28 @@ function updateMaximizeIcon() {
       ? '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2" y="1.5" width="7" height="7" rx="0.5"/><rect x="3" y="3.5" width="7" height="7" rx="0.5"/></svg>'
       : '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1.5" y="1.5" width="9" height="9" rx="1"/></svg>';
   }
+
+  // 最大化时拖拽区域改成点击还原，还原后恢复拖拽
+  const dragEls = document.querySelectorAll('#titlebar-drag, #main-drag');
+  dragEls.forEach(el => {
+    if (isWindowMaximized) {
+      el.style.webkitAppRegion = 'no-drag';
+      el.style.cursor = 'default';
+      el._unmaxHandler = el._unmaxHandler || (async () => {
+        await window.electronAPI.unmaximize();
+        isWindowMaximized = false;
+        updateMaximizeIcon();
+      });
+      el.addEventListener('mousedown', el._unmaxHandler);
+    } else {
+      el.style.webkitAppRegion = 'drag';
+      el.style.cursor = '';
+      if (el._unmaxHandler) {
+        el.removeEventListener('mousedown', el._unmaxHandler);
+        el._unmaxHandler = null;
+      }
+    }
+  });
 }
 
 async function toggleMaximize() {
