@@ -82,6 +82,7 @@ function applyTheme() {
   root.style.setProperty('--accent-hover', `rgb(${Math.max(0,r-20)}, ${Math.max(0,g-20)}, ${Math.max(0,b-20)})`);
   document.body.style.colorScheme = isDark ? 'dark' : 'light';
   root.setAttribute('data-theme', isDark ? 'dark' : 'light');
+  if (typeof MarkdownEditor !== 'undefined') MarkdownEditor.updateTheme();
 }
 
 // ====== 窗口控件（同时支持有边框和无边框） ======

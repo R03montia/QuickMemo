@@ -88,8 +88,24 @@ const MarkdownEditor = (() => {
       container._destroy = null;
     };
 
+    // 绑定暗色模式 class
+    updateEditorTheme();
     mode = 'wysiwyg';
     return container;
+  }
+
+  /**
+   * 根据 data-theme 切换编辑器暗色 class
+   */
+  function updateEditorTheme() {
+    if (!editorInstance) return;
+    const rootEl = editorInstance.options.el;
+    if (!rootEl) return;
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const defaultUI = rootEl.querySelector('.toastui-editor-defaultUI');
+    if (defaultUI) {
+      defaultUI.classList.toggle('toastui-editor-dark', isDark);
+    }
   }
 
   return {
@@ -162,5 +178,8 @@ const MarkdownEditor = (() => {
       const ta = container.querySelector('#note-body-plain');
       return ta && document.activeElement === ta;
     },
+
+    /** 更新编辑器暗色模式（主题切换时调用） */
+    updateTheme() { updateEditorTheme(); },
   };
 })();
