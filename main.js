@@ -74,6 +74,36 @@ function getShortcut() {
   return (data.settings && data.settings.shortcut) || DEFAULT_SHORTCUT;
 }
 
+// ====== .md 文件打开 ======
+function getMdFileFromArgs(argv) {
+  if (!argv) return null;
+  for (const arg of argv) {
+    if (arg.endsWith('.md') || arg.endsWith('.markdown') || arg.endsWith('.txt')) {
+      return arg;
+    }
+  }
+  return null;
+}
+
+function openMdFile(filePath) {
+  if (!fs.existsSync(filePath)) return;
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const name = path.basename(filePath, path.extname(filePath));
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+      mainWindow.focus();
+      mainWindow.webContents.send('open-md-file', {
+        path: filePath,
+        name: name,
+        content: content,
+      });
+    }
+  } catch (e) {
+    console.warn('QuickMemo: failed to open file', filePath, e.message);
+  }
+}
+
 function registerGlobalShortcut(accelerator) {
   globalShortcut.unregisterAll();
   try {
@@ -252,12 +282,20 @@ const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, argv) => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.show();
       mainWindow.focus();
     }
+    // 处理拖入的文件（第二个实例时）
+    const filePath = getMdFileFromArgs(argv);
+    if (filePath) openMdFile(filePath);
+  });
+
+  // 文件关联打开（macOS）
+  app.on('open-file', (_event, filePath) => {
+    openMdFile(filePath);
   });
 
   app.whenReady().then(() => {
@@ -271,6 +309,12 @@ if (!gotTheLock) {
 
     // 注册全局快捷键
     registerGlobalShortcut(getShortcut());
+
+    // 处理首次启动时的文件参数
+    mainWindow.webContents.on('did-finish-load', () => {
+      const filePath = getMdFileFromArgs(process.argv);
+      if (filePath) openMdFile(filePath);
+    });
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -316,6 +360,15 @@ ipcMain.handle('maximize-window', () => {
 ipcMain.handle('unmaximize-window', () => mainWindow?.unmaximize());
 ipcMain.handle('is-maximized', () => mainWindow?.isMaximized() ?? false);
 ipcMain.handle('close-window', () => mainWindow?.hide());
+ipcMain.handle('save-file', (_, { filePath, content }) => {
+  try {
+    fs.writeFileSync(filePath, content, 'utf-8');
+    return true;
+  } catch (e) {
+    console.warn('QuickMemo: failed to save file', filePath, e.message);
+    return false;
+  }
+});
 ipcMain.handle('get-shortcut', () => getShortcut());
 ipcMain.handle('set-shortcut', (_, accelerator) => {
   try { setShortcut(accelerator); return true; }

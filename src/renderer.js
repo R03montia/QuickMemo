@@ -9,6 +9,7 @@ const SVG = {
   pen: '<svg class="icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 3.5l2 2L6 16H4v-2l10.5-10.5z"/></svg>',
   notems: '<svg class="icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3l2 2L6 17H3v-3L15 3z"/><line x1="13" y1="5" x2="15" y2="7"/></svg>',
   checkbox: '<svg class="icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="14" height="14" rx="2"/><polyline points="14 8 9 13 6 10"/></svg>',
+  file: '<svg class="icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2h10l4 4v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><polyline points="14 2 14 8 20 8"/><line x1="6" y1="12" x2="14" y2="12"/><line x1="6" y1="15" x2="11" y2="15"/></svg>',
 };
 
 let state = { notes: [], reminders: [], selectedId: null, multiSelected: new Set(), multiMode: false };
@@ -71,6 +72,66 @@ async function init() {
   setupMultiToolbar();
   setupCalendar();
   setupTimeWheel();
+  setupFileOpen();
+}
+
+// ====== .md 文件打开 ======
+function setupFileOpen() {
+  // 主进程推送的文件打开
+  if (window.electronAPI.onOpenMdFile) {
+    window.electronAPI.onOpenMdFile(({ path: filePath, name, content }) => {
+      const existing = state.notes.find(n => n.filePath === filePath);
+      if (existing) {
+        selectNote(existing.id);
+        return;
+      }
+      const note = {
+        id: Date.now().toString(),
+        title: name,
+        body: content,
+        filePath: filePath,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      state.notes.unshift(note);
+      selectNote(note.id);
+      scheduleSave();
+    });
+  }
+
+  // 拖拽 .md 文件到窗口
+  document.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  });
+  document.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const files = e.dataTransfer?.files;
+    if (!files || !files.length) return;
+    for (const file of files) {
+      if (file.name.endsWith('.md') || file.name.endsWith('.markdown')) {
+        // 通过 File API 读取内容
+        const content = await file.text();
+        const existing = state.notes.find(n => n.filePath === file.path);
+        if (existing) {
+          selectNote(existing.id);
+        } else {
+          const note = {
+            id: Date.now().toString(),
+            title: file.name.replace(/\.(md|markdown)$/i, ''),
+            body: content,
+            filePath: file.path,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          state.notes.unshift(note);
+          selectNote(note.id);
+          scheduleSave();
+        }
+      }
+    }
+  });
 }
 
 function applyTheme() {
@@ -352,6 +413,7 @@ function renderSidebar() {
     item.dataset.id = note.id;
     const reminder = state.reminders.find(r => r.noteId === note.id && !r.done);
     let icon = SVG.note;
+    if (note.filePath) icon = SVG.file;
     if (note.notemsKey) icon = SVG.notems;
     if (reminder) icon = SVG.alarm;
     item.innerHTML = `
@@ -469,6 +531,19 @@ function renderEditor(id) {
   titleEl.value = note.title || '';
   titleEl.readOnly = !!note.notemsKey;
   titleEl.style.cursor = note.notemsKey ? 'default' : '';
+  // 显示文件路径
+  let pathEl = document.getElementById('file-path-indicator');
+  if (!pathEl) {
+    pathEl = document.createElement('span');
+    pathEl.id = 'file-path-indicator';
+    titleEl.parentNode.insertBefore(pathEl, titleEl.nextSibling);
+  }
+  if (note.filePath) {
+    pathEl.textContent = '📄 ' + note.filePath;
+    pathEl.style.display = '';
+  } else {
+    pathEl.style.display = 'none';
+  }
   // 销毁旧编辑器实例
   MarkdownEditor.destroy();
 
@@ -841,7 +916,14 @@ function scheduleSave() {
   if (status) status.textContent = '保存中…';
   saveTimer = setTimeout(async () => {
     await window.electronAPI.saveData({ notes: state.notes, reminders: state.reminders.filter(r => !r.done) });
-    if (status) status.textContent = '已自动保存';
+    // 如果有文件关联，同步写回 .md 文件
+    const note = state.notes.find(n => n.id === state.selectedId);
+    if (note && note.filePath) {
+      const ok = await window.electronAPI.saveFile(note.filePath, note.body || '');
+      if (status) status.textContent = ok ? '已保存到文件' : '文件保存失败';
+    } else {
+      if (status) status.textContent = '已自动保存';
+    }
   }, 500);
 }
 

@@ -672,6 +672,16 @@ textarea:focus-visible {
 
 #note-title::placeholder { color: var(--text-secondary); }
 
+#file-path-indicator {
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 2px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
 #reminder-section {
   position: relative;
   display: flex;
