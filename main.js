@@ -189,19 +189,34 @@ function createWindow() {
       savedBounds.y = b.y;
     }
   });
-  mainWindow.on('will-move', (event) => {
+  // 拖拽最大化窗口标题栏 → 自动还原
+  let wasMaximizedOnMove = false;
+  mainWindow.on('will-move', () => {
     if (mainWindow.isMaximized()) {
-      event.preventDefault();
+      wasMaximizedOnMove = true;
       mainWindow.unmaximize();
-      const { screen } = require('electron');
-      const cursor = screen.getCursorScreenPoint();
-      const w = savedBounds.width || 800;
-      mainWindow.setBounds({
-        x: Math.round(cursor.x - w / 2),
-        y: Math.round(cursor.y - 16),
-        width: w,
-        height: savedBounds.height || 600,
-      });
+    }
+  });
+  mainWindow.on('move', () => {
+    if (wasMaximizedOnMove) {
+      wasMaximizedOnMove = false;
+      // 取消最大化后窗口位置会跳，用鼠标位置修正
+      try {
+        const { screen } = require('electron');
+        const cursor = screen.getCursorScreenPoint();
+        const bounds = mainWindow.getBounds();
+        const titleBarY = bounds.y;
+        const relX = cursor.x - bounds.x;
+        if (relX < 0 || relX > bounds.width) {
+          // 鼠标在窗口外，居中
+          mainWindow.setBounds({
+            x: Math.round(cursor.x - bounds.width / 2),
+            y: Math.round(cursor.y - 8),
+            width: bounds.width,
+            height: bounds.height,
+          });
+        }
+      } catch {}
     }
   });
 
