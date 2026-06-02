@@ -250,7 +250,17 @@ ipcMain.handle('maximize-window', () => {
   if (mainWindow?.isMaximized()) mainWindow.unmaximize();
   else mainWindow?.maximize();
 });
+ipcMain.handle('unmaximize-window', () => mainWindow?.unmaximize());
+ipcMain.handle('is-maximized', () => mainWindow?.isMaximized() ?? false);
 ipcMain.handle('close-window', () => mainWindow?.hide());
+ipcMain.handle('get-window-bounds', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return null;
+  return mainWindow.getBounds();
+});
+ipcMain.handle('set-window-bounds', (_, bounds) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (bounds.x != null) mainWindow.setBounds(bounds);
+});
 ipcMain.handle('get-appearance', () => getAppearance());
 ipcMain.handle('set-appearance', (_, mode) => { setAppearance(mode); });
 ipcMain.handle('set-theme', (_, theme) => { setTheme(theme); });

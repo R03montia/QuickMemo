@@ -90,6 +90,14 @@ const MarkdownEditor = (() => {
 
     // 绑定暗色模式 class
     updateEditorTheme();
+
+    // 延迟触发 resize，等容器完成布局后重排工具栏
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.dispatchEvent(new Event('resize'));
+      });
+    });
+
     mode = 'wysiwyg';
     return container;
   }

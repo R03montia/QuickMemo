@@ -95,6 +95,28 @@ function setupTitlebar() {
   bindClick('btn-minimize', () => window.electronAPI.minimize());
   bindClick('btn-maximize', () => window.electronAPI.maximize());
   bindClick('btn-close', () => window.electronAPI.close());
+
+  // 拖拽最大化窗口的标题栏 → 先还原再拖拽
+  let isRestoring = false;
+  document.querySelectorAll('#titlebar-drag, #main-drag').forEach(el => {
+    if (!el) return;
+
+    // 双击切换最大化
+    el.addEventListener('dblclick', async () => {
+      await window.electronAPI.maximize();
+    });
+
+    // 鼠标按下时若最大化 → 先还原
+    el.addEventListener('mousedown', async (e) => {
+      const maximized = await window.electronAPI.isMaximized();
+      if (maximized) {
+        isRestoring = true;
+        await window.electronAPI.unmaximize();
+        // 短暂延迟后允许继续拖拽
+        setTimeout(() => { isRestoring = false; }, 150);
+      }
+    });
+  });
 }
 
 function bindClick(id, fn) {

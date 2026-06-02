@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   cancelReminder: (id) => ipcRenderer.invoke('cancel-reminder', id),
   minimize: () => ipcRenderer.invoke('minimize-window'),
   maximize: () => ipcRenderer.invoke('maximize-window'),
+  unmaximize: () => ipcRenderer.invoke('unmaximize-window'),
+  isMaximized: () => ipcRenderer.invoke('is-maximized'),
   close: () => ipcRenderer.invoke('close-window'),
   onThemeChanged: (cb) => {
     ipcRenderer.on('theme-changed', (_, data) => cb(data));
