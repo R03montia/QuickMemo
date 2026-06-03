@@ -10,9 +10,6 @@ const SVG = {
   notems: '<svg class="icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3l2 2L6 17H3v-3L15 3z"/><line x1="13" y1="5" x2="15" y2="7"/></svg>',
   checkbox: '<svg class="icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="14" height="14" rx="2"/><polyline points="14 8 9 13 6 10"/></svg>',
   file: '<svg class="icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2h10l4 4v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><polyline points="14 2 14 8 20 8"/><line x1="6" y1="12" x2="14" y2="12"/><line x1="6" y1="15" x2="11" y2="15"/></svg>',
-  // C4 修复：原 updateMaximizeIcon 里的硬编码 SVG 字符串
-  maximize: '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1.5" y="1.5" width="9" height="9" rx="1"/></svg>',
-  maximizeRestored: '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2" y="1.5" width="7" height="7" rx="0.5"/><rect x="3" y="3.5" width="7" height="7" rx="0.5"/></svg>',
 };
 
 let state = { notes: [], reminders: [], selectedId: null, multiSelected: new Set(), multiMode: false };
@@ -38,15 +35,15 @@ async function init() {
   // 同步注册 IPC 监听器（必须在任何 await 之前，防止竞态）
   setupFileOpenSync();
 
-  // 一次性收集所有初始数据
-  const [accent, sysTheme, savedAlpha, data] = await Promise.all([
-    window.electronAPI.getAccentColor(),
-    window.electronAPI.getTheme(),
-    window.electronAPI.getPanelAlpha(),
-    window.electronAPI.loadData(),
-  ]);
-  systemAccent = accent;
-  isDark = sysTheme === 'dark';
+  currentAccent = await window.electronAPI.getAccentColor();
+  const theme = await window.electronAPI.getTheme();
+  isDark = theme === 'dark';
+  applyTheme();
+
+  currentThemePref = await window.electronAPI.getThemePreference();
+
+  // 加载保存的不透明度
+  const savedAlpha = await window.electronAPI.getPanelAlpha();
   currentPanelAlpha = savedAlpha;
 
   state.notes = data.notes || [];
@@ -119,7 +116,6 @@ async function init() {
   setupCalendar();
   setupTimeWheel();
   setupFileOpen();
-  setupSidebarResizer();
 
   // 标记初始化完成，处理等待中的文件打开
   initComplete = true;
@@ -151,12 +147,8 @@ function processOpenMdFile(data) {
   const { path: filePath, name, content } = data;
   if (!filePath) return;
 
-  // C5 修复：Windows 路径大小写不敏感，统一小写比较
-  const normPath = (p) => p ? p.replace(/\\/g, '/').toLowerCase() : p;
-  const filePathKey = normPath(filePath);
-
   try {
-    const existing = state.notes.find(n => normPath(n.filePath) === filePathKey);
+    const existing = state.notes.find(n => n.filePath === filePath);
     if (existing) {
       // 同步文件最新内容
       if (content !== undefined) existing.body = content;
@@ -166,13 +158,12 @@ function processOpenMdFile(data) {
       return;
     }
     const note = {
-      id: genNoteId(),
+      id: Date.now().toString(),
       title: name || '未命名',
       body: content || '',
       filePath: filePath,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      _autoTitled: false,
     };
     state.notes.unshift(note);
     selectNote(note.id);
@@ -197,21 +188,17 @@ function setupFileOpen() {
       if (file.name.endsWith('.md') || file.name.endsWith('.markdown')) {
         // 通过 File API 读取内容
         const content = await file.text();
-        // C5 修复：同 processOpenMdFile，统一小写比较
-        const normPath = (p) => p ? p.replace(/\\/g, '/').toLowerCase() : p;
-        const fileKey = normPath(file.path);
-        const existing = state.notes.find(n => normPath(n.filePath) === fileKey);
+        const existing = state.notes.find(n => n.filePath === file.path);
         if (existing) {
           selectNote(existing.id);
         } else {
           const note = {
-            id: genNoteId(),
+            id: Date.now().toString(),
             title: file.name.replace(/\.(md|markdown)$/i, ''),
             body: content,
             filePath: file.path,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
-            _autoTitled: false,
           };
           state.notes.unshift(note);
           selectNote(note.id);
@@ -220,31 +207,6 @@ function setupFileOpen() {
       }
     }
   });
-}
-
-// 系统强调色（init 时记录，onThemeChanged 时同步更新）
-let systemAccent = '#0078d4';
-// 主题/模式运行时状态（持久化在 settings.theme / settings.mode）
-let currentThemePref = 'default';
-let currentModePref = 'system';
-
-// 主题化的强调色 + 侧栏/主区域基础 RGB（用于 alpha 滑块动态计算透明度）
-// 每个主题两种模式（light/dark）的基础色不同
-const FLAG_THEMES = {
-  sunset: {
-    accent: { light: '#FF4500', dark: '#FF6B35' },
-    sidebar: { light: '255, 165, 100', dark: '60, 20, 10' },
-    main:    { light: '255, 248, 240', dark: '35, 14, 8' },
-  },
-  ocean: {
-    accent: { light: '#0074D9', dark: '#4FC3F7' },
-    sidebar: { light: '57, 204, 204',  dark: '8, 18, 35' },
-    main:    { light: '240, 250, 255', dark: '5, 12, 25' },
-  },
-};
-
-function isFlagTheme(theme) {
-  return theme in FLAG_THEMES;
 }
 
 function applyTheme() {
@@ -660,20 +622,35 @@ function renderSidebar() {
     if (note.id === state.selectedId) cls += ' active';
     if (state.multiSelected.has(note.id)) cls += ' multi-selected';
     item.className = cls;
-    // 按 notes 顺序挂到正确位置
-    if (list.children[idx] !== item) list.insertBefore(item, list.children[idx] || null);
-  });
-  // 移除已不存在的节点
-  for (const [id, el] of noteElCache) {
-    if (!seen.has(id)) {
-      el.remove();
-      noteElCache.delete(id);
-    }
-  }
-  // 移除 list 末尾多余的孤儿（防御性，正常不应有）
-  while (list.children.length > state.notes.length) {
-    const last = list.lastChild;
-    if (last) { noteElCache.delete(last.dataset.id); last.remove(); }
+    item.dataset.id = note.id;
+    const reminder = state.reminders.find(r => r.noteId === note.id && !r.done);
+    let icon = SVG.note;
+    if (note.filePath) icon = SVG.file;
+    if (note.notemsKey) icon = SVG.notems;
+    if (reminder) icon = SVG.alarm;
+    item.innerHTML = `
+      <span class="note-item-drag-handle">${SVG.drag}</span>
+      <span class="note-item-icon">${icon}</span>
+      <span class="note-item-title">${escapeHtml(note.title || '未命名')}</span>
+      <span class="note-item-time">${formatTime(note.updatedAt)}</span>
+    `;
+    item.addEventListener('click', (e) => {
+      if (e.target.closest('.note-item-drag-handle')) return;
+      if (state.multiMode) {
+        if (state.multiSelected.has(note.id)) {
+          state.multiSelected.delete(note.id);
+        } else {
+          state.multiSelected.add(note.id);
+        }
+        item.classList.toggle('multi-selected', state.multiSelected.has(note.id));
+        updateMultiCount();
+        return;
+      }
+      selectNote(note.id);
+    });
+    item.addEventListener('contextmenu', (e) => showContextMenu(e, note.id));
+    setupDragDrop(item, note.id);
+    list.appendChild(item);
   }
 }
 
@@ -800,11 +777,8 @@ function renderEditor(id) {
   const useMarkdown = isMarkdownEnabledForNote(note);
   MarkdownEditor.init(bodyContainer, note.body || '', useMarkdown);
 
-  // 同步模式切换按钮 UI（注意：updateModeToggleUI 可能在 setupEditor 之前就已被调用，
-  // 用 typeof 防御；模块级定义见 setupEditor 上方）
-  if (typeof updateModeToggleUI === 'function') {
-    updateModeToggleUI(MarkdownEditor.getMode());
-  }
+  // 每次切换笔记后重新注册编辑器回调（因为 DOM 已被替换）
+  registerEditorCallbacks();
 
   // 每次切换笔记后重新注册编辑器回调（因为 DOM 已被替换）
   registerEditorCallbacks();
@@ -849,26 +823,14 @@ function setupNewNote() {
     openNotemsDialog();
   });
 
-  // 空状态里的"新建笔记"大按钮
-  const btnEmptyNew = document.getElementById('btn-empty-new');
-  if (btnEmptyNew) {
-    btnEmptyNew.addEventListener('click', () => btn.click());
-  }
-}
-
 // 自动生成标题（从正文第一行）
-// BUG FIX: autoTitle should only run ONCE when body first gets content,
-// not on every keystroke. Track with _autoTitled flag.
 function autoTitle(note) {
   const isDefault = !note.title || note.title === '新笔记' || note.title === '未命名';
   if (!isDefault) return;
-  // Don't auto-title if already auto-titled once before
-  if (note._autoTitled) return;
   if (!note.body) return;
   const firstLine = note.body.split('\n')[0].trim();
   if (firstLine && firstLine.length >= 3 && firstLine.length <= 60) {
     note.title = firstLine;
-    note._autoTitled = true;
     document.getElementById('note-title').value = firstLine;
     updateSidebarItem(note.id, firstLine);
     scheduleSave();
@@ -919,9 +881,8 @@ function registerEditorCallbacks() {
     });
   };
   // 延迟附加滚动监听，等编辑器渲染完成
-  // A6 修复：每次切换笔记前先清掉旧 timer，避免快速切换时多次重复 attach
-  if (btnScrollBottom._scrollTimer) clearTimeout(btnScrollBottom._scrollTimer);
-  btnScrollBottom._scrollTimer = setTimeout(attachScroll, 300);
+  setTimeout(attachScroll, 300);
+
 }
 
 function setupEditor() {
@@ -930,10 +891,7 @@ function setupEditor() {
   title.addEventListener('input', () => {
     const note = state.notes.find(n => n.id === state.selectedId);
     if (!note || note.notemsKey) return;
-    note.title = title.value || '未命名';
-    // Manual title edit resets auto-title flag so we don't override
-    note._autoTitled = true;
-    scheduleSave(); updateSidebarItem(note.id, note.title);
+    note.title = title.value || '未命名'; scheduleSave(); updateSidebarItem(note.id, note.title);
   });
   // Ctrl+S 保存（监听 document，兼容 WYSIWYG 和纯文本模式）
   document.addEventListener('keydown', (e) => {
@@ -1282,9 +1240,10 @@ function scheduleSave() {
   const snapshotBody = snapshotNote ? snapshotNote.body : null;
   saveTimer = setTimeout(async () => {
     await window.electronAPI.saveData({ notes: state.notes, reminders: state.reminders.filter(r => !r.done) });
-    if (snapshotFilePath) {
-      // 用快照时的 body 和 filePath 写入，不读最新的 state.selectedId
-      const ok = await window.electronAPI.saveFile(snapshotFilePath, snapshotBody || '');
+    // 如果有文件关联，同步写回 .md 文件
+    const note = state.notes.find(n => n.id === state.selectedId);
+    if (note && note.filePath) {
+      const ok = await window.electronAPI.saveFile(note.filePath, note.body || '');
       if (status) status.textContent = ok ? '已保存到文件' : '文件保存失败';
     } else {
       if (status) status.textContent = '已自动保存';
@@ -1445,9 +1404,6 @@ function setupSettings() {
     }
     if (section === 'shortcut') {
       loadShortcutInput();
-    }
-    if (section === 'customcss') {
-      loadCustomCSS();
     }
   }
 
