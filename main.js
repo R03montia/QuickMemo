@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Notification, nativeTheme, systemPreferences, Tray, Menu, nativeImage, net, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, Notification, nativeTheme, systemPreferences, Tray, Menu, nativeImage, net, globalShortcut, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const net_module = require('net');
@@ -134,7 +134,7 @@ function setShortcut(accelerator) {
   }
 }
 
-// ====== 主题管理 ======
+// ====== 主题管理（theme 和 mode 独立） ======
 function getThemePreference() {
   const data = readData();
   const s = data.settings || {};
@@ -375,12 +375,6 @@ if (!gotTheLock) {
       try { globalShortcut.unregisterAll(); } catch {}
     });
 
-    // 注册 before-quit（必须在 app.isReady() 之后才能使用 globalShortcut）
-    app.on('before-quit', () => {
-      app.isQuitting = true;
-      try { globalShortcut.unregisterAll(); } catch {}
-    });
-
     createWindow();
     createTray();
     scheduleReminders();
@@ -446,6 +440,20 @@ ipcMain.handle('maximize-window', () => {
 ipcMain.handle('unmaximize-window', () => mainWindow?.unmaximize());
 ipcMain.handle('is-maximized', () => mainWindow?.isMaximized() ?? false);
 ipcMain.handle('close-window', () => mainWindow?.hide());
+ipcMain.handle('open-external', async (_, url) => {
+  // 严格校验 url，避免被 note.ms 之类不可信输入滥用
+  if (typeof url !== 'string') return { ok: false, error: 'invalid url' };
+  const trimmed = url.trim();
+  if (!/^https?:\/\//i.test(trimmed) && !/^mailto:/i.test(trimmed)) {
+    return { ok: false, error: 'only http(s) and mailto are allowed' };
+  }
+  try {
+    await shell.openExternal(trimmed);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
 ipcMain.handle('save-file', (_, { filePath, content }) => {
   try {
     fs.writeFileSync(filePath, content, 'utf-8');
