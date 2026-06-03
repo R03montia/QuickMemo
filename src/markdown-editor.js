@@ -84,7 +84,7 @@ const MarkdownEditor = (() => {
     const textarea = document.createElement('textarea');
     textarea.className = 'obsidian-textarea';
     textarea.value = content || '';
-    textarea.placeholder = '写点什么……';
+    textarea.placeholder = '在这里写 Markdown...（**粗体** *斜体* [链接](url) 等）';
     textarea.spellcheck = false;
     textarea.wrap = 'off';
     editPane.appendChild(textarea);
@@ -274,10 +274,16 @@ const MarkdownEditor = (() => {
       if (useMarkdown) {
         createSplitEditor(container, content);
       } else {
-        createPlainEditor(container, content);
+        // Markdown 模式：默认 source，用户可切到 preview
+        currentMode = 'source';
+        mountSource(root, content);
       }
-    },
 
+      container._destroy = () => {
+        clearContainer();
+        container = null;
+      };
+    },
     /** 销毁编辑器和所有事件监听 */
     destroy() {
       // _destroy 在 container 上，由 renderer 调用前通过 container._destroy() 完成

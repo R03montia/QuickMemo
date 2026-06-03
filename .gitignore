@@ -1,19 +1,54 @@
-# Dependencies
+# ===== 依赖 =====
 node_modules/
 
-# User data (notes, settings)
+# ===== 用户运行时数据（私人笔记，敏感） =====
 data/
+# 例外：保留 .gitkeep 让目录结构可见
+!data/.gitkeep
 
-# Local configuration
+# ===== 工具/编辑器本地配置（per-user，不该提交） =====
 .claude/
 .superpowers/
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
+
+# ===== 操作系统文件 =====
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+$RECYCLE.BIN/
+
+# ===== npm / Node 调试 =====
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+node-gyp-cache/
+
+# ===== Electron / 打包临时文件 =====
+dist/
+out/
+build/
+*.log
+.cache/
+.tmp/
+tmp/
+temp/
+.DS_Store
+
+# ===== 环境变量 / 凭据 =====
+.env
+.env.local
+.env.*.local
+
+# ===== 测试覆盖率 =====
+coverage/
+.nyc_output/
+
+# ===== TypeScript / 构建产物 =====
+*.tsbuildinfo
+.tscache/

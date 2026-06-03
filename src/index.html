@@ -3,48 +3,91 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
   <title>QuickMemo</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <!-- 有边框模式标题栏 -->
-  <div id="titlebar">
-    <div id="titlebar-drag">
-      <span id="app-title-bar">QuickMemo</span>
+
+  <!-- =========== 标题栏（branded） =========== -->
+  <header id="titlebar" class="titlebar">
+    <div id="titlebar-drag" class="titlebar-drag">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M7 4h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/>
+            <polyline points="14 4 14 9 19 9"/>
+            <line x1="9" y1="14" x2="15" y2="14"/>
+            <line x1="9" y1="17" x2="13" y2="17"/>
+          </svg>
+        </div>
+        <span class="brand-text">QuickMemo</span>
+        <span class="brand-tag">备忘录</span>
+      </div>
     </div>
-    <div id="titlebar-controls">
-      <button class="title-btn" id="btn-minimize-bar" title="最小化">─</button>
-      <button class="title-btn" id="btn-maximize-bar" title="最大化">□</button>
-      <button class="title-btn title-btn-close" id="btn-close-bar" title="关闭">✕</button>
+    <div id="titlebar-controls" class="titlebar-controls">
+      <button class="ctl-btn mode-toggle-btn" id="btn-mode-toggle" title="切换深浅色" aria-label="切换深浅色">
+        <svg class="icon icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3"/><line x1="8" y1="1.5" x2="8" y2="3"/><line x1="8" y1="13" x2="8" y2="14.5"/><line x1="1.5" y1="8" x2="3" y2="8"/><line x1="13" y1="8" x2="14.5" y2="8"/><line x1="3.2" y1="3.2" x2="4.3" y2="4.3"/><line x1="11.7" y1="11.7" x2="12.8" y2="12.8"/><line x1="3.2" y1="12.8" x2="4.3" y2="11.7"/><line x1="11.7" y1="4.3" x2="12.8" y2="3.2"/></svg>
+        <svg class="icon icon-moon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M13.5 9.5a5.5 5.5 0 0 1-7-7 5.5 5.5 0 1 0 7 7z"/></svg>
+        <svg class="icon icon-auto" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="display:none"><rect x="2" y="3" width="12" height="9" rx="1.5"/><line x1="5" y1="14" x2="11" y2="14"/><line x1="8" y1="12" x2="8" y2="14"/></svg>
+      </button>
+      <button class="ctl-btn" id="btn-minimize-bar" title="最小化" aria-label="最小化">─</button>
+      <button class="ctl-btn" id="btn-maximize-bar" title="最大化" aria-label="最大化">□</button>
+      <button class="ctl-btn ctl-close" id="btn-close-bar" title="关闭" aria-label="关闭">✕</button>
     </div>
-  </div>
+  </header>
 
   <!-- 无边框模式浮动控件 -->
   <div id="window-controls">
-    <button class="ctl-btn" id="btn-minimize" title="最小化">
+    <button class="ctl-btn mode-toggle-btn" id="btn-mode-toggle-float" title="切换深浅色" aria-label="切换深浅色">
+      <svg class="icon icon-sun" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.2"/><line x1="6" y1="1" x2="6" y2="2.2"/><line x1="6" y1="9.8" x2="6" y2="11"/><line x1="1" y1="6" x2="2.2" y2="6"/><line x1="9.8" y1="6" x2="11" y2="6"/><line x1="2.4" y1="2.4" x2="3.3" y2="3.3"/><line x1="8.7" y1="8.7" x2="9.6" y2="9.6"/><line x1="2.4" y1="9.6" x2="3.3" y2="8.7"/><line x1="8.7" y1="3.3" x2="9.6" y2="2.4"/></svg>
+      <svg class="icon icon-moon" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M10 7.5a4 4 0 0 1-5.5-5.5 4 4 0 1 0 5.5 5.5z"/></svg>
+      <svg class="icon icon-auto" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" style="display:none"><rect x="1.5" y="2.5" width="9" height="6" rx="1"/><line x1="4" y1="10.5" x2="8" y2="10.5"/><line x1="6" y1="8.5" x2="6" y2="10.5"/></svg>
+    </button>
+    <button class="ctl-btn" id="btn-minimize" title="最小化" aria-label="最小化">
       <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><line x1="2" y1="6" x2="10" y2="6"/></svg>
     </button>
-    <button class="ctl-btn" id="btn-maximize" title="最大化">
+    <button class="ctl-btn" id="btn-maximize" title="最大化" aria-label="最大化">
       <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1.5" y="1.5" width="9" height="9" rx="1"/></svg>
     </button>
-    <button class="ctl-btn ctl-close" id="btn-close" title="关闭">
+    <button class="ctl-btn ctl-close" id="btn-close" title="关闭" aria-label="关闭">
       <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/></svg>
     </button>
   </div>
 
+  <!-- =========== 主应用容器 =========== -->
   <div id="app-container">
-    <aside id="sidebar">
-      <div id="sidebar-header" class="drag-region">
-        <button id="btn-new-note">
-          <svg class="icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="10" y1="4" x2="10" y2="16"/><line x1="4" y1="10" x2="16" y2="10"/></svg>
-          新建笔记
-        </button>
-      </div>
-      <div id="multi-toolbar" style="display:none;">
-        <span id="multi-count">已选 0 项</span>
-        <button id="btn-multi-delete" title="批量删除"></button>
-        <button id="btn-multi-reminder" title="批量设置提醒"></button>
-        <button id="btn-multi-done">取消</button>
+
+    <!-- =========== 侧栏 =========== -->
+    <aside id="sidebar" class="sidebar">
+
+      <!-- 侧栏顶部：主操作 + 分组标签 -->
+      <div class="sidebar-top">
+        <div id="sidebar-header" class="sidebar-header-wrap">
+          <button id="btn-new-note" class="btn btn-primary btn-new-note" aria-label="新建笔记">
+            <svg class="btn-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="10" y1="4" x2="10" y2="16"/><line x1="4" y1="10" x2="16" y2="10"/></svg>
+            <span class="btn-label">新建笔记</span>
+            <span class="btn-hint">右键 · note.ms</span>
+          </button>
+
+          <div class="sidebar-section">
+            <span class="sidebar-section-label">所有笔记</span>
+            <span class="sidebar-section-count" id="sidebar-count">0</span>
+          </div>
+        </div>
+
+        <div id="multi-toolbar" class="multi-toolbar" style="display:none;">
+          <span id="multi-count" class="multi-count">已选 0 项</span>
+          <div class="multi-toolbar-actions">
+            <button id="btn-multi-reminder" class="icon-btn" title="批量设置提醒" aria-label="批量设置提醒">
+              <svg class="icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7A5 5 0 0 0 5 7c0 5.5-2.5 7.5-2.5 7.5h15S15 12.5 15 7"/><path d="M11.4 16.5a1.5 1.5 0 0 1-2.8 0"/></svg>
+            </button>
+            <button id="btn-multi-delete" class="icon-btn icon-btn-danger" title="批量删除" aria-label="批量删除">
+              <svg class="icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h14"/><path d="M16 6v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6"/><path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h1A1.5 1.5 0 0 1 12 4.5V6"/></svg>
+            </button>
+            <button id="btn-multi-done" class="btn-link" aria-label="取消多选">取消</button>
+          </div>
+        </div>
       </div>
       <div id="note-list"></div>
       <div id="settings-nav" style="display:none;">
@@ -54,46 +97,118 @@
         <div class="settings-nav-item" data-section="editor">编辑器</div>
         <div class="settings-nav-item" data-section="shortcut">快捷键</div>
       </div>
-      <div id="slider-panel"></div>
-      <button id="btn-settings" title="设置">⚙</button>
     </aside>
 
-    <main id="main-content">
+    <!-- =========== 主内容区 =========== -->
+    <main id="main-content" class="main">
       <div id="main-drag" class="drag-region"></div>
-      <div id="empty-state">
-        <div id="empty-icon">
-          <svg class="icon icon-empty" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-            <line x1="16" y1="13" x2="8" y2="13"/>
-            <line x1="16" y1="17" x2="8" y2="17"/>
+
+      <!-- 空状态 -->
+      <div id="empty-state" class="empty-state">
+        <div class="empty-illustration">
+          <svg viewBox="0 0 120 120" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="22" y="18" width="60" height="80" rx="6" opacity="0.35"/>
+            <rect x="36" y="28" width="60" height="80" rx="6" fill="var(--main-bg, white)"/>
+            <line x1="48" y1="48" x2="84" y2="48" opacity="0.5"/>
+            <line x1="48" y1="58" x2="78" y2="58" opacity="0.5"/>
+            <line x1="48" y1="68" x2="80" y2="68" opacity="0.5"/>
+            <line x1="48" y1="78" x2="68" y2="78" opacity="0.5"/>
+            <circle cx="86" cy="86" r="14" fill="var(--accent)" stroke="none"/>
+            <line x1="86" y1="80" x2="86" y2="92" stroke="white" stroke-width="2.4"/>
+            <line x1="80" y1="86" x2="92" y2="86" stroke="white" stroke-width="2.4"/>
           </svg>
         </div>
-        <p>选择左侧笔记，或点击「新建笔记」开始</p>
+        <h2 class="empty-title">开始你的第一条笔记</h2>
+        <p class="empty-desc">在左侧选择一条笔记，或点击下面的按钮立即开始</p>
+        <button class="btn btn-primary btn-lg" id="btn-empty-new">
+          <svg class="btn-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="10" y1="4" x2="10" y2="16"/><line x1="4" y1="10" x2="16" y2="10"/></svg>
+          <span>新建笔记</span>
+        </button>
+        <div class="empty-hints">
+          <div class="empty-hint"><kbd>Ctrl</kbd><kbd>S</kbd> 保存</div>
+          <div class="empty-hint"><kbd>右键</kbd> 标题栏 → 从 note.ms</div>
+        </div>
       </div>
 
-      <div id="settings-section" style="display:none;">
+      <!-- 设置面板 -->
+      <div id="settings-section" class="settings-section" style="display:none;">
         <div id="section-theme" class="settings-page">
-          <div class="settings-page-header">主题</div>
+          <div class="settings-page-header">
+            <h3>主题</h3>
+            <p>选择主题风格，再在「模式」里选浅色或深色</p>
+          </div>
           <div class="settings-page-body">
             <div class="settings-options">
-              <button class="settings-option" data-action="theme" data-value="system">跟随系统</button>
-              <button class="settings-option" data-action="theme" data-value="light">浅色</button>
-              <button class="settings-option" data-action="theme" data-value="dark">深色</button>
+              <button class="settings-option" data-action="theme" data-value="default">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><line x1="8" y1="20" x2="16" y2="20"/><line x1="12" y1="18" x2="12" y2="20"/></svg>
+                <span class="settings-option-label">默认</span>
+                <span class="settings-option-desc">跟随系统强调色</span>
+              </button>
+
+              <button class="settings-option" data-action="theme" data-value="sunset">
+                <span class="flag-strip" style="background:linear-gradient(180deg,#8B0000 0%,#8B0000 20%,#D62800 20%,#D62800 40%,#FF9B55 40%,#FF9B55 60%,#FFD700 60%,#FFD700 80%,#E91E63 80%,#E91E63 100%);"></span>
+                <span class="settings-option-label">夕阳</span>
+                <span class="settings-option-desc">橙金粉调</span>
+              </button>
+
+              <button class="settings-option" data-action="theme" data-value="ocean">
+                <span class="flag-strip" style="background:linear-gradient(180deg,#001f3f 0%,#001f3f 20%,#003366 20%,#003366 40%,#0074D9 40%,#0074D9 60%,#39CCCC 60%,#39CCCC 80%,#7FDBFF 80%,#7FDBFF 100%);"></span>
+                <span class="settings-option-label">海洋</span>
+                <span class="settings-option-desc">深浅蓝调</span>
+              </button>
             </div>
           </div>
         </div>
+
+        <div id="section-mode" class="settings-page" style="display:none;">
+          <div class="settings-page-header">
+            <h3>模式</h3>
+            <p>浅色 / 深色（仅影响默认主题；旗帜主题请直接在「主题」里切换）</p>
+          </div>
+          <div class="settings-page-body">
+            <div class="settings-options">
+              <button class="settings-option" data-action="mode" data-value="system">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><line x1="8" y1="20" x2="16" y2="20"/><line x1="12" y1="18" x2="12" y2="20"/></svg>
+                <span class="settings-option-label">跟随系统</span>
+              </button>
+              <button class="settings-option" data-action="mode" data-value="light">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/><line x1="4.2" y1="4.2" x2="6.3" y2="6.3"/><line x1="17.7" y1="17.7" x2="19.8" y2="19.8"/><line x1="4.2" y1="19.8" x2="6.3" y2="17.7"/><line x1="17.7" y1="6.3" x2="19.8" y2="4.2"/></svg>
+                <span class="settings-option-label">浅色</span>
+              </button>
+              <button class="settings-option" data-action="mode" data-value="dark">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+                <span class="settings-option-label">深色</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
         <div id="section-appearance" class="settings-page" style="display:none;">
-          <div class="settings-page-header">窗口样式</div>
+          <div class="settings-page-header">
+            <h3>窗口样式</h3>
+            <p>选择标题栏的显示方式</p>
+          </div>
           <div class="settings-page-body">
             <div class="settings-options">
-              <button class="settings-option" data-action="appearance" data-value="bordered">有边框</button>
-              <button class="settings-option" data-action="appearance" data-value="borderless">无边框</button>
+              <button class="settings-option" data-action="appearance" data-value="bordered">
+                <svg viewBox="0 0 28 22" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="2" width="24" height="18" rx="2"/><line x1="2" y1="7" x2="26" y2="7"/><line x1="22" y1="4.5" x2="22" y2="5.5"/><line x1="24" y1="4.5" x2="24" y2="5.5"/><line x1="26" y1="4.5" x2="26" y2="5.5"/></svg>
+                <span class="settings-option-label">有边框</span>
+                <span class="settings-option-desc">完整标题栏</span>
+              </button>
+              <button class="settings-option" data-action="appearance" data-value="borderless">
+                <svg viewBox="0 0 28 22" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="2" width="24" height="18" rx="2"/><circle cx="22" cy="4.5" r="0.5" fill="currentColor"/><circle cx="24" cy="4.5" r="0.5" fill="currentColor"/><circle cx="26" cy="4.5" r="0.5" fill="currentColor"/></svg>
+                <span class="settings-option-label">无边框</span>
+                <span class="settings-option-desc">浮动控件</span>
+              </button>
             </div>
           </div>
         </div>
+
         <div id="section-opacity" class="settings-page" style="display:none;">
-          <div class="settings-page-header">不透明度</div>
+          <div class="settings-page-header">
+            <h3>不透明度</h3>
+            <p>面板透出桌面的程度（5%~100%）</p>
+          </div>
           <div class="settings-page-body">
             <div class="settings-slider-wrap">
               <input type="range" class="slider-input" id="settings-opacity-range" min="10" max="100" value="82">
@@ -101,8 +216,12 @@
             </div>
           </div>
         </div>
+
         <div id="section-editor" class="settings-page" style="display:none;">
-          <div class="settings-page-header">编辑器</div>
+          <div class="settings-page-header">
+            <h3>编辑器</h3>
+            <p>Markdown 渲染相关选项</p>
+          </div>
           <div class="settings-page-body">
             <div class="editor-toggle-item">
               <div class="editor-toggle-label">
@@ -141,109 +260,139 @@
         </div>
       </div>
 
-      <div id="note-editor" style="display:none;">
-        <div id="editor-header">
-          <input type="text" id="note-title" placeholder="笔记标题">
-          <div id="reminder-section">
-            <button id="btn-refresh-notems" title="从 note.ms 刷新" style="display:none;">
-              <svg class="icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 10a7 7 0 0 1-14 0M3 7V3h4"/><path d="M3 3l4 4"/></svg>
-            </button>
-            <button id="btn-reminder" title="设置提醒">
-              <svg class="icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7A5 5 0 0 0 5 7c0 5.5-2.5 7.5-2.5 7.5h15S15 12.5 15 7"/><path d="M11.4 16.5a1.5 1.5 0 0 1-2.8 0"/></svg>
-              提醒
-            </button>
-            <div id="reminder-picker" style="display:none;">
-              <div class="picker-title"><svg class="icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7A5 5 0 0 0 5 7c0 5.5-2.5 7.5-2.5 7.5h15S15 12.5 15 7"/><path d="M11.4 16.5a1.5 1.5 0 0 1-2.8 0"/></svg> 设置提醒</div>
-              <div class="custom-datepicker" id="custom-datepicker">
-                <div class="cal-header">
-                  <button class="cal-nav" data-action="prev">‹</button>
-                  <span class="cal-month-year" id="cal-month-year"></span>
-                  <button class="cal-nav" data-action="next">›</button>
+      <!-- 编辑器 -->
+      <div id="note-editor" class="note-editor" style="display:none;">
+
+        <div id="editor-header" class="editor-header">
+          <div class="editor-title-wrap">
+            <input type="text" id="note-title" class="editor-title" placeholder="无标题笔记" autocomplete="off">
+            <div id="file-path-indicator" class="file-path-indicator" style="display:none;"></div>
+          </div>
+
+          <div class="editor-toolbar">
+            <div id="reminder-section" class="reminder-section">
+              <button id="btn-refresh-notems" class="icon-btn" title="从 note.ms 刷新" aria-label="从 note.ms 刷新" style="display:none;">
+                <svg class="icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 10a7 7 0 0 1-14 0M3 7V3h4"/><path d="M3 3l4 4"/></svg>
+              </button>
+
+              <button id="btn-reminder" class="btn btn-secondary" title="设置提醒">
+                <svg class="btn-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7A5 5 0 0 0 5 7c0 5.5-2.5 7.5-2.5 7.5h15S15 12.5 15 7"/><path d="M11.4 16.5a1.5 1.5 0 0 1-2.8 0"/></svg>
+                <span class="btn-label">提醒</span>
+              </button>
+
+              <div id="reminder-badge" class="reminder-badge" style="display:none;"></div>
+              <button id="btn-cancel-reminder-badge" class="icon-btn icon-btn-danger" title="取消提醒" aria-label="取消提醒" style="display:none;">
+                <svg class="icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="15" y2="15"/><line x1="15" y1="5" x2="5" y2="15"/></svg>
+              </button>
+
+              <div id="reminder-picker" class="reminder-picker" style="display:none;">
+                <div class="picker-title">
+                  <svg class="icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7A5 5 0 0 0 5 7c0 5.5-2.5 7.5-2.5 7.5h15S15 12.5 15 7"/><path d="M11.4 16.5a1.5 1.5 0 0 1-2.8 0"/></svg>
+                  设置提醒
                 </div>
-                <div class="cal-weekdays">
-                  <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
-                </div>
-                <div class="cal-days" id="cal-days"></div>
-                <div class="cal-time-row">
-                  <svg class="icon cal-clock-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7.5"/><polyline points="10 6 10 10 13 13"/></svg>
-                  <div class="time-wheel" id="time-wheel">
-                    <div class="tw-column" id="tw-hours-col">
-                      <div class="tw-items" id="tw-hours-items"></div>
-                    </div>
-                    <span class="tw-sep">:</span>
-                    <div class="tw-column" id="tw-minutes-col">
-                      <div class="tw-items" id="tw-minutes-items"></div>
+                <div class="custom-datepicker" id="custom-datepicker">
+                  <div class="cal-header">
+                    <button class="cal-nav" data-action="prev" aria-label="上个月">‹</button>
+                    <span class="cal-month-year" id="cal-month-year"></span>
+                    <button class="cal-nav" data-action="next" aria-label="下个月">›</button>
+                  </div>
+                  <div class="cal-weekdays">
+                    <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+                  </div>
+                  <div class="cal-days" id="cal-days"></div>
+                  <div class="cal-time-row">
+                    <svg class="icon cal-clock-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7.5"/><polyline points="10 6 10 10 13 13"/></svg>
+                    <div class="time-wheel" id="time-wheel">
+                      <div class="tw-column" id="tw-hours-col">
+                        <div class="tw-items" id="tw-hours-items"></div>
+                      </div>
+                      <span class="tw-sep">:</span>
+                      <div class="tw-column" id="tw-minutes-col">
+                        <div class="tw-items" id="tw-minutes-items"></div>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-              <div class="picker-actions">
-                <button id="btn-set-reminder" class="picker-primary">确定</button>
-                <button id="btn-cancel-reminder" class="picker-cancel">取消</button>
+                <div class="picker-actions">
+                  <button id="btn-cancel-reminder" class="btn btn-ghost">取消</button>
+                  <button id="btn-set-reminder" class="btn btn-primary">确定</button>
+                </div>
               </div>
             </div>
-            <span id="reminder-badge" style="display:none;"></span>
-            <button id="btn-cancel-reminder-badge" title="取消提醒" style="display:none;">
-              <svg class="icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="15" y2="15"/><line x1="15" y1="5" x2="5" y2="15"/></svg>
-            </button>
           </div>
         </div>
-        <div id="note-body-container"></div>
-        <div id="note-footer">
-          <span id="note-status">已自动保存</span>
-          <button id="btn-delete-note" title="删除">
-            <svg class="icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h14"/><path d="M16 6v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6"/><path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h1A1.5 1.5 0 0 1 12 4.5V6"/></svg>
+
+        <div id="note-body-container" class="note-body-container"></div>
+
+        <div id="note-footer" class="note-footer">
+          <span id="note-status" class="note-status">就绪</span>
+          <div class="footer-info">
+            <span id="note-charcount" class="note-charcount">0 字</span>
+            <span class="footer-sep">·</span>
+            <span id="note-mode" class="note-mode">Markdown</span>
+          </div>
+          <div class="footer-mode-toggle" id="footer-mode-toggle">
+            <button class="mode-toggle-btn" id="btn-toggle-mode" title="切换编辑模式">
+              <svg class="icon" id="icon-edit-mode" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14.5 3.5l2 2L6 16H4v-2L14.5 3.5z"/>
+              </svg>
+              <svg class="icon" id="icon-preview-mode" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+                <circle cx="10" cy="10" r="3"/><path d="M2 10s3-5 8-5 8 5 8 5-3 5-8 5-8-5-8-5z"/>
+              </svg>
+              <span id="mode-toggle-label">预览</span>
+            </button>
+          </div>
+          <button id="btn-delete-note" class="btn btn-danger-ghost" title="删除笔记" aria-label="删除笔记">
+            <svg class="btn-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h14"/><path d="M16 6v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6"/><path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h1A1.5 1.5 0 0 1 12 4.5V6"/></svg>
+            <span class="btn-label">删除</span>
           </button>
         </div>
-        <button id="btn-scroll-bottom" title="滚动到底">
+
+        <button id="btn-scroll-bottom" class="fab-mini" title="滚动到底" aria-label="滚动到底">
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="6 8 10 12 14 8"/>
             <polyline points="6 12 10 16 14 12"/>
           </svg>
         </button>
       </div>
+
     </main>
-  </div>
 
-  <!-- 右键菜单 -->
-  <div id="context-menu" class="context-menu" style="display:none;">
-    <div class="context-menu-item" data-action="rename">
-      <svg class="icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 3.5l3 3L7 16H4v-3l9.5-9.5z"/></svg>
-      重命名
-    </div>
-    <div class="context-menu-separator"></div>
-    <div class="context-menu-item" data-action="delete">
-      <svg class="icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h14"/><path d="M15 5v10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5"/><path d="M8 5V3.5A1.5 1.5 0 0 1 9.5 2h1A1.5 1.5 0 0 1 12 3.5V5"/></svg>
-      删除
-    </div>
+    <!-- 侧栏拖拽手柄（放在 main 之后、app-container 关闭前；用 position:absolute 定位到侧栏右边） -->
+    <div id="sidebar-resizer" class="sidebar-resizer" aria-label="拖拽调整侧栏宽度" title="拖拽调整宽度"></div>
   </div>
+  <!-- =========== 右键菜单 =========== -->
+  <div id="context-menu" class="context-menu" style="display:none;"></div>
 
-  <!-- 确认对话框 -->
-  <div id="confirm-overlay" style="display:none;">
-    <div id="confirm-dialog">
-      <div id="confirm-text"></div>
-      <div class="notems-footer">
-        <button id="confirm-cancel" class="picker-cancel">取消</button>
-        <button id="confirm-ok" class="picker-primary">确定</button>
+  <!-- =========== 确认对话框 =========== -->
+  <div id="confirm-overlay" class="dialog-overlay" style="display:none;">
+    <div id="confirm-dialog" class="dialog dialog-sm">
+      <div id="confirm-text" class="dialog-text"></div>
+      <div class="dialog-actions">
+        <button id="confirm-cancel" class="btn btn-ghost">取消</button>
+        <button id="confirm-ok" class="btn btn-primary">确定</button>
       </div>
     </div>
   </div>
 
-  <!-- Note.ms 对话框 -->
-  <div id="notems-overlay" style="display:none;">
-    <div id="notems-dialog">
-      <div class="notems-header">
-        <span>获取 Notems 内容</span>
-        <button id="notems-close" class="ctl-btn" title="关闭">✕</button>
+  <!-- =========== Note.ms 对话框 =========== -->
+  <div id="notems-overlay" class="dialog-overlay" style="display:none;">
+    <div id="notems-dialog" class="dialog">
+      <div class="dialog-header">
+        <span class="dialog-title">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;margin-right:8px;vertical-align:-3px;"><path d="M15 3l2 2L6 17H3v-3L15 3z"/><line x1="13" y1="5" x2="15" y2="7"/></svg>
+          获取 Notems 内容
+        </span>
+        <button id="notems-close" class="icon-btn" title="关闭" aria-label="关闭">✕</button>
       </div>
-      <div class="notems-body">
+      <div class="dialog-body">
         <p class="notems-hint">输入标识符，将拉取 note.ms/<strong>标识符</strong> 的内容</p>
-        <input type="text" id="notems-input" placeholder="输入标识符..." class="notems-input" spellcheck="false">
+        <input type="text" id="notems-input" placeholder="输入标识符..." class="text-input" spellcheck="false" autocomplete="off">
         <div id="notems-error" class="notems-error" style="display:none;"></div>
       </div>
-      <div class="notems-footer">
-        <button id="notems-cancel" class="picker-cancel">取消</button>
-        <button id="notems-confirm" class="picker-primary">获取</button>
+      <div class="dialog-actions">
+        <button id="notems-cancel" class="btn btn-ghost">取消</button>
+        <button id="notems-confirm" class="btn btn-primary">获取</button>
       </div>
     </div>
   </div>

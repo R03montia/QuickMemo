@@ -1,5 +1,7 @@
 # QuickMemo — Win11 风格快捷备忘录
 
+你是一个编程大师。
+
 ## 项目概述
 Electron 桌面备忘录应用，Win11 透明窗口 + 毛玻璃效果，支持笔记管理、提醒、主题切换、窗口样式切换、Note.ms 云同步。
 
@@ -23,6 +25,7 @@ QuickMemo/
 ├── data/
 │   └── notes.json           # 本地数据持久化
 ├── CLAUDE.md                # 项目说明文档
+├── AI_INTEGRATION.md        # AI CLI 接口文档（Named Pipe）
 └── scripts/
     └── generate-icons.js    # 图标生成工具
 ```
@@ -34,6 +37,7 @@ QuickMemo/
 - 系统托盘：主题切换 / 窗口样式切换 / 退出
 - IPC handler：数据 CRUD、提醒调度、主题/外观管理、面板透明度
 - Note.ms 集成：`net.fetch` GET 拉取内容，隐藏 BrowserWindow 注入 JS 提交保存
+- **AI CLI 集成**：`net.Server` 监听 `\\.\pipe\QuickMemo_AI`，支持外部 AI 工具读写笔记
 - 单实例锁（防重复启动）
 - 关闭时隐藏到托盘（非退出）
 
@@ -62,7 +66,7 @@ QuickMemo/
 ### 数据格式 (notes.json)
 ```json
 {
-  "notes": [{ "id", "title", "body", "createdAt", "updatedAt", "notemsKey?" }],
+  "notes": [{ "id", "title", "body", "createdAt", "updatedAt", "notemsKey?", "filePath?", "_autoTitled?" }],
   "reminders": [{ "id", "noteId", "time", "done" }],
   "settings": { "theme": "system|light|dark", "appearance": "bordered|borderless", "panelAlpha": 82 }
 }

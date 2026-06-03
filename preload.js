@@ -4,6 +4,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAccentColor: () => ipcRenderer.invoke('get-accent-color'),
   getTheme: () => ipcRenderer.invoke('get-theme'),
   getThemePreference: () => ipcRenderer.invoke('get-theme-preference'),
+  setMode: (mode) => ipcRenderer.invoke('set-mode', mode),
+  getMode: () => ipcRenderer.invoke('get-mode'),
   setTheme: (theme) => ipcRenderer.invoke('set-theme', theme),
   loadData: () => ipcRenderer.invoke('load-data'),
   saveData: (data) => ipcRenderer.invoke('save-data', data),
@@ -38,4 +40,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setPanelAlpha: (alpha) => ipcRenderer.invoke('set-panel-alpha', alpha),
   getNotemsContent: (key) => ipcRenderer.invoke('notems-get', key),
   setNotemsContent: (key, content) => ipcRenderer.invoke('notems-put', { key, content }),
+  exportMarkdownFile: (filename, content) => ipcRenderer.invoke('export-markdown-file', { filename, content }),
+  openExternal: (url) => ipcRenderer.invoke('open-external', url),
 });

@@ -14,7 +14,7 @@ const SVG = {
 
 let state = { notes: [], reminders: [], selectedId: null, multiSelected: new Set(), multiMode: false };
 let saveTimer = null;
-let settings = { markdownEnabled: true, notemsMarkdownEnabled: false, theme: 'system', appearance: 'bordered', panelAlpha: 82 };
+let settings = { markdownEnabled: true, notemsMarkdownEnabled: false, theme: 'system', appearance: 'bordered', panelAlpha: 82, customCSS: '' };
 
 function isMarkdownEnabledForNote(note) {
   if (note.markdownEnabled !== undefined) return note.markdownEnabled;
@@ -28,7 +28,6 @@ let selectedMinute = 0;
 let currentAccent = '#005fb8';
 let isDark = false;
 let currentPanelAlpha = 82;
-let currentThemePref = 'system';
 let currentAppearance = 'bordered';
 
 // ====== 初始化 ======
@@ -46,24 +45,65 @@ async function init() {
   // 加载保存的不透明度
   const savedAlpha = await window.electronAPI.getPanelAlpha();
   currentPanelAlpha = savedAlpha;
-  applyPanelAlpha(savedAlpha);
 
-  const data = await window.electronAPI.loadData();
   state.notes = data.notes || [];
   state.reminders = data.reminders || [];
-  if (data.settings) {
-    settings = Object.assign(settings, data.settings);
+  if (data.settings) settings = Object.assign(settings, data.settings);
+
+  // 迁移：旧 settings.theme（'system'/'light'/'dark'/'sunset'/'ocean'/'trans'/'lesbian'/'gay'）
+  //   → 新 settings.theme + settings.mode
+  if (!data.settings || (data.settings.theme === undefined && data.settings.mode === undefined)) {
+    // 兼容老格式：data.settings.theme 是单个字段
+    const oldTheme = data.settings && data.settings.theme;
+    if (oldTheme === 'system' || !oldTheme) {
+      currentThemePref = 'default';
+      currentModePref = 'system';
+    } else if (oldTheme === 'light' || oldTheme === 'dark') {
+      currentThemePref = 'default';
+      currentModePref = oldTheme;
+    } else if (oldTheme === 'trans') {
+      // trans 已删除，回退到默认
+      currentThemePref = 'default';
+      currentModePref = 'light';
+    } else if (oldTheme === 'lesbian') {
+      // 旧名 lesbian → 新名 sunset
+      currentThemePref = 'sunset';
+      currentModePref = 'light';
+    } else if (oldTheme === 'gay') {
+      // 旧名 gay → 新名 ocean
+      currentThemePref = 'ocean';
+      currentModePref = 'light';
+    } else {
+      // 旧 sunset/ocean：保持
+      currentThemePref = oldTheme;
+      currentModePref = 'light';
+    }
+    // 回写新格式
+    await window.electronAPI.saveData({ ...data, settings: { ...(data.settings || {}), theme: currentThemePref, mode: currentModePref } });
+  } else {
+    currentThemePref = data.settings.theme || 'default';
+    currentModePref = data.settings.mode || 'system';
   }
+
+  applyTheme();
+  applyPanelAlpha(savedAlpha);
 
   renderSidebar();
   if (state.notes.length > 0) selectNote(state.notes[0].id);
+  else setMainView('empty');
 
-  window.electronAPI.onThemeChanged(({ accent, dark, theme }) => {
-    currentAccent = accent;
+  // 系统主题变更监听：旗帜主题下不响应（用户选了什么就用什么）
+  window.electronAPI.onThemeChanged(({ accent, dark }) => {
+    // 始终更新 systemAccent 和 isDark
+    systemAccent = accent;
     isDark = dark;
-    currentThemePref = theme || currentThemePref;
-    applyTheme();
-    applyPanelAlpha(currentPanelAlpha);
+    // 当前是旗帜主题 → 忽略 OS 主题切换事件（用户已显式选择）
+    if (isFlagTheme(currentThemePref)) return;
+    // 默认主题 + system mode：响应 OS 切换
+    if (currentModePref === 'system') {
+      applyTheme();
+      applyPanelAlpha(currentPanelAlpha);
+    }
   });
 
   setupTitlebar();
@@ -171,14 +211,76 @@ function setupFileOpen() {
 
 function applyTheme() {
   const root = document.documentElement;
+  const flag = isFlagTheme(currentThemePref) ? FLAG_THEMES[currentThemePref] : null;
+
+  // 决定 effective mode
+  // - 默认主题：mode 可为 system/light/dark，system 跟随 isDark
+  // - 旗帜主题：mode 直接取 currentModePref，system 当 light
+  let effectiveMode;
+  if (flag) {
+    effectiveMode = currentModePref === 'dark' ? 'dark' : 'light';
+  } else {
+    if (currentModePref === 'system') effectiveMode = isDark ? 'dark' : 'light';
+    else effectiveMode = currentModePref;
+  }
+
+  // 强调色：旗帜主题按 mode 取对应色；默认主题用系统色
+  if (flag) {
+    currentAccent = flag.accent[effectiveMode];
+  } else {
+    currentAccent = systemAccent;
+  }
   root.style.setProperty('--accent', currentAccent);
   const r = parseInt(currentAccent.slice(1,3), 16);
   const g = parseInt(currentAccent.slice(3,5), 16);
   const b = parseInt(currentAccent.slice(5,7), 16);
   root.style.setProperty('--accent-hover', `rgb(${Math.max(0,r-20)}, ${Math.max(0,g-20)}, ${Math.max(0,b-20)})`);
-  document.body.style.colorScheme = isDark ? 'dark' : 'light';
-  root.setAttribute('data-theme', isDark ? 'dark' : 'light');
+
+  // 设置双属性
+  root.setAttribute('data-theme', currentThemePref);
+  root.setAttribute('data-mode', effectiveMode);
+  document.body.style.colorScheme = effectiveMode === 'dark' ? 'dark' : 'light';
+
   if (typeof MarkdownEditor !== 'undefined') MarkdownEditor.updateTheme();
+  if (typeof updateModeToggleIcon === 'function') updateModeToggleIcon();
+}
+
+// 标题栏/无边框模式切换按钮：更新 sun/moon/auto 图标（两组都要更新）
+function updateModeToggleIcon() {
+  const groups = [
+    { sun: document.querySelector('#btn-mode-toggle .icon-sun'),
+      moon: document.querySelector('#btn-mode-toggle .icon-moon'),
+      auto: document.querySelector('#btn-mode-toggle .icon-auto') },
+    { sun: document.querySelector('#btn-mode-toggle-float .icon-sun'),
+      moon: document.querySelector('#btn-mode-toggle-float .icon-moon'),
+      auto: document.querySelector('#btn-mode-toggle-float .icon-auto') },
+  ];
+  for (const g of groups) {
+    if (!g.sun || !g.moon || !g.auto) continue;
+    g.sun.style.display = 'none';
+    g.moon.style.display = 'none';
+    g.auto.style.display = 'none';
+    if (currentModePref === 'dark') g.moon.style.display = '';
+    else if (currentModePref === 'system') g.auto.style.display = '';
+    else g.sun.style.display = '';
+  }
+}
+
+// 标题栏模式按钮点击：light → dark → system → light（旗帜主题跳过 system）
+function cycleMode() {
+  if (isFlagTheme(currentThemePref)) {
+    currentModePref = currentModePref === 'dark' ? 'light' : 'dark';
+  } else {
+    currentModePref = currentModePref === 'light' ? 'dark'
+                   : currentModePref === 'dark' ? 'system'
+                   : 'light';
+  }
+  applyTheme();
+  applyPanelAlpha(currentPanelAlpha);
+  window.electronAPI.setMode(currentModePref);
+  // 同步设置面板高亮
+  document.querySelectorAll('.settings-option[data-action="mode"]').forEach(b =>
+    b.classList.toggle('active', b.dataset.value === currentModePref));
 }
 
 // ====== 窗口控件（同时支持有边框和无边框） ======
@@ -189,9 +291,8 @@ function updateMaximizeIcon() {
   const btnFloat = document.getElementById('btn-maximize');
   if (btnBar) btnBar.textContent = isWindowMaximized ? '❐' : '□';
   if (btnFloat) {
-    btnFloat.innerHTML = isWindowMaximized
-      ? '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2" y="1.5" width="7" height="7" rx="0.5"/><rect x="3" y="3.5" width="7" height="7" rx="0.5"/></svg>'
-      : '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1.5" y="1.5" width="9" height="9" rx="1"/></svg>';
+    // C4 修复：原硬编码 SVG 字符串移到 SVG 对象统一管理
+    btnFloat.innerHTML = isWindowMaximized ? SVG.maximizeRestored : SVG.maximize;
   }
 
   // 最大化时拖拽区域改成点击还原，还原后恢复拖拽
@@ -232,6 +333,22 @@ function setupTitlebar() {
   bindClick('btn-minimize', () => window.electronAPI.minimize());
   bindClick('btn-maximize', () => toggleMaximize());
   bindClick('btn-close', () => window.electronAPI.close());
+
+  // 模式快速切换按钮（标题栏 + 无边框浮动，都绑同一个 cycleMode）
+  const btnModeToggle = document.getElementById('btn-mode-toggle');
+  if (btnModeToggle) {
+    btnModeToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      cycleMode();
+    });
+  }
+  const btnModeToggleFloat = document.getElementById('btn-mode-toggle-float');
+  if (btnModeToggleFloat) {
+    btnModeToggleFloat.addEventListener('click', (e) => {
+      e.stopPropagation();
+      cycleMode();
+    });
+  }
 
   // 启动时检测一次
   window.electronAPI.isMaximized().then(v => {
@@ -437,11 +554,70 @@ function deleteNote(noteId) {
 }
 
 // ====== 侧边栏 ======
+// B11 修复：原 renderSidebar 每次 innerHTML='' 全量重建 DOM，100+ 笔记会卡且丢失滚动位置。
+// 改为增量 patch：保留 id→element 映射，只增删改。
+const noteElCache = new Map();
+
+function buildNoteItem(note) {
+  const item = document.createElement('div');
+  item.dataset.id = note.id;
+  const reminder = state.reminders.find(r => r.noteId === note.id && !r.done);
+  const titleText = escapeHtml(note.title || '未命名');
+  const timeText = formatTime(note.updatedAt);
+  let icon = SVG.note;
+  if (note.filePath) icon = SVG.file;
+  if (note.notemsKey) icon = SVG.notems;
+  if (reminder) icon = SVG.alarm;
+  item.innerHTML = `
+    <span class="note-item-drag-handle">${SVG.drag}</span>
+    <span class="note-item-icon">${icon}</span>
+    <span class="note-item-title">${titleText}</span>
+    <span class="note-item-time">${timeText}</span>
+  `;
+  item.addEventListener('click', (e) => {
+    if (e.target.closest('.note-item-drag-handle')) return;
+    if (state.multiMode) {
+      if (state.multiSelected.has(note.id)) {
+        state.multiSelected.delete(note.id);
+      } else {
+        state.multiSelected.add(note.id);
+      }
+      item.classList.toggle('multi-selected', state.multiSelected.has(note.id));
+      updateMultiCount();
+      return;
+    }
+    selectNote(note.id);
+  });
+  item.addEventListener('contextmenu', (e) => showContextMenu(e, note.id));
+  setupDragDrop(item, note.id);
+  return item;
+}
+
 function renderSidebar() {
   const list = document.getElementById('note-list');
-  list.innerHTML = '';
-  for (const note of state.notes) {
-    const item = document.createElement('div');
+  const seen = new Set();
+  // 复用/创建/更新现有节点
+  state.notes.forEach((note, idx) => {
+    seen.add(note.id);
+    let item = noteElCache.get(note.id);
+    if (!item) {
+      item = buildNoteItem(note);
+      noteElCache.set(note.id, item);
+    } else {
+      // 更新 title / time / icon（className 由 updateSidebarItem 单独处理）
+      const titleEl = item.querySelector('.note-item-title');
+      const timeEl = item.querySelector('.note-item-time');
+      const iconEl = item.querySelector('.note-item-icon');
+      if (titleEl) titleEl.textContent = note.title || '未命名';
+      if (timeEl) timeEl.textContent = formatTime(note.updatedAt);
+      const reminder = state.reminders.find(r => r.noteId === note.id && !r.done);
+      let icon = SVG.note;
+      if (note.filePath) icon = SVG.file;
+      if (note.notemsKey) icon = SVG.notems;
+      if (reminder) icon = SVG.alarm;
+      if (iconEl) iconEl.innerHTML = icon;
+    }
+    // 同步 active / multi-selected 状态
     let cls = 'note-item';
     if (note.id === state.selectedId) cls += ' active';
     if (state.multiSelected.has(note.id)) cls += ' multi-selected';
@@ -550,9 +726,16 @@ function selectNote(id) {
   if (state.multiMode) exitMultiSelect();
   state.selectedId = id;
   state.multiSelected.clear();
+  setMainView('editor');
   renderSidebar();
   renderEditor(id);
   document.querySelectorAll('.note-item').forEach(el => el.classList.toggle('active', el.dataset.id === id));
+}
+
+// 防御：控制 .main 的 data-view 属性，确保只有 empty / editor / settings 之一可见
+function setMainView(view) {
+  const main = document.getElementById('main-content');
+  if (main) main.setAttribute('data-view', view);
 }
 
 // ====== 编辑器 ======
@@ -560,7 +743,14 @@ function renderEditor(id) {
   const note = state.notes.find(n => n.id === id);
   const editor = document.getElementById('note-editor');
   const empty = document.getElementById('empty-state');
-  if (!note) { editor.style.display = 'none'; empty.style.display = 'block'; return; }
+  const fabReminder = document.getElementById('fab-reminder');
+  if (!note) {
+    editor.style.display = 'none';
+    empty.style.display = 'block';
+    // 没有选中笔记时，隐藏 fab-reminder（仅在编辑器可见时显示）
+    if (fabReminder) fabReminder.style.display = 'none';
+    return;
+  }
   empty.style.display = 'none';
   editor.style.display = 'flex';
   const titleEl = document.getElementById('note-title');
@@ -590,6 +780,12 @@ function renderEditor(id) {
   // 每次切换笔记后重新注册编辑器回调（因为 DOM 已被替换）
   registerEditorCallbacks();
 
+  // 每次切换笔记后重新注册编辑器回调（因为 DOM 已被替换）
+  registerEditorCallbacks();
+
+  // 同步 FAB-reminder 可见性（fabReminder 已在函数顶部声明）
+  if (fabReminder) fabReminder.style.display = '';
+
   const reminder = state.reminders.find(r => r.noteId === id && !r.done);
   const badge = document.getElementById('reminder-badge');
   const cancelBtn = document.getElementById('btn-cancel-reminder-badge');
@@ -616,7 +812,7 @@ function renderEditor(id) {
 function setupNewNote() {
   const btn = document.getElementById('btn-new-note');
   btn.addEventListener('click', () => {
-    const note = { id: Date.now().toString(), title: '新笔记', body: '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const note = { id: genNoteId(), title: '新笔记', body: '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), _autoTitled: false };
     state.notes.unshift(note);
     selectNote(note.id);
     scheduleSave();
@@ -626,7 +822,6 @@ function setupNewNote() {
     e.preventDefault();
     openNotemsDialog();
   });
-}
 
 // 自动生成标题（从正文第一行）
 function autoTitle(note) {
@@ -687,6 +882,7 @@ function registerEditorCallbacks() {
   };
   // 延迟附加滚动监听，等编辑器渲染完成
   setTimeout(attachScroll, 300);
+
 }
 
 function setupEditor() {
@@ -714,6 +910,15 @@ function setupEditor() {
     if (note && bodyContainer) note.body = MarkdownEditor.getContent(bodyContainer);
     window.electronAPI.saveData({ notes: state.notes, reminders: state.reminders.filter(r => !r.done) }).then(() => {
       if (status) status.textContent = '已保存';
+      // 同时导出当前笔记为 .md 到用户个人文件夹
+      if (note) {
+        const exportName = note.title || '未命名';
+        window.electronAPI.exportMarkdownFile(exportName, note.body || '').then(result => {
+          if (result && result.ok) {
+            if (status) status.textContent = '已保存到 ' + result.path;
+          }
+        });
+      }
       if (note && note.notemsKey) {
         window.electronAPI.setNotemsContent(note.notemsKey, note.body).then(ok => {
           if (ok) { if (status) status.textContent = '已同步到 note.ms'; }
@@ -741,32 +946,45 @@ function setupEditor() {
   const btnSet = document.getElementById('btn-set-reminder');
   const btnCancel = document.getElementById('btn-cancel-reminder');
 
-  let closePicker = () => { picker.style.display = 'none'; };
-  btnReminder.addEventListener('click', () => {
+  // A1 修复：使用显式的 outsideHandler 变量管理 document.click 监听，
+  // 避免原来"let closePicker = ... + setTimeout 内重新赋值"那种不直观的模式
+  let pickerOutsideHandler = null;
+  function dismissPicker() {
+    picker.style.display = 'none';
+    if (pickerOutsideHandler) {
+      document.removeEventListener('click', pickerOutsideHandler);
+      pickerOutsideHandler = null;
+    }
+  }
+  function attachPickerOutsideClose() {
+    if (pickerOutsideHandler) return; // 已注册则跳过
+    pickerOutsideHandler = (e) => {
+      if (!picker.contains(e.target) && e.target !== btnReminder) {
+        dismissPicker();
+      }
+    };
+    // 延迟一帧注册，避免本次打开 picker 的点击事件立刻被自己消费
+    setTimeout(() => document.addEventListener('click', pickerOutsideHandler), 0);
+  }
+
+  btnReminder.addEventListener('click', (e) => {
+    e.stopPropagation();
     const now = new Date();
     resetCalendar(now);
     picker.style.display = 'flex';
-    // 点击提醒菜单外任意处关闭
-    setTimeout(() => document.addEventListener('click', closePicker = (e) => {
-      if (!picker.contains(e.target) && e.target !== btnReminder) {
-        picker.style.display = 'none';
-        document.removeEventListener('click', closePicker);
-      }
-    }), 0);
+    attachPickerOutsideClose();
   });
   btnSet.addEventListener('click', async () => {
     const dt = getPickerDateTime();
     if (!dt || isNaN(dt.getTime())) return;
-    picker.style.display = 'none';
-    document.removeEventListener('click', closePicker);
+    dismissPicker();
     const reminder = await window.electronAPI.setReminder(state.selectedId, dt.toISOString());
     state.reminders.push(reminder);
     renderEditor(state.selectedId);
     renderSidebar();
   });
   btnCancel.addEventListener('click', () => {
-    picker.style.display = 'none';
-    document.removeEventListener('click', closePicker);
+    dismissPicker();
   });
 
   document.getElementById('btn-cancel-reminder-badge').addEventListener('click', async () => {
@@ -813,6 +1031,54 @@ function setupEditor() {
       }
     }
   });
+
+  // ====== 模式切换按钮（底部栏）======
+  const btnToggleMode = document.getElementById('btn-toggle-mode');
+  const iconSource = document.getElementById('icon-edit-mode');     // 用同一个 SVG id 但语义是 source
+  const iconPreview = document.getElementById('icon-preview-mode');
+  const modeLabel = document.getElementById('mode-toggle-label');
+  const noteModeDisplay = document.getElementById('note-mode');
+
+  // 注：updateModeToggleUI 是模块级函数（定义在 setupEditor 上方），
+  // 因为 renderEditor 会在 init() 早期就调用它，那时 setupEditor 还没执行。
+
+  if (btnToggleMode) {
+    btnToggleMode.addEventListener('click', () => {
+      const current = MarkdownEditor.getMode();
+      const next = current === 'source' ? 'preview' : 'source';
+      MarkdownEditor.setMode(next);
+      updateModeToggleUI(next);
+    });
+  }
+
+  // 监听 markdown-editor 内部模式变化（如初始化时）
+  window.addEventListener('editor-mode-changed', (e) => {
+    updateModeToggleUI(e.detail.mode);
+  });
+}
+
+// 模块级：模式切换按钮 UI 同步函数（每次都重新查询 DOM，避免闭包捕获过期元素）
+function updateModeToggleUI(mode) {
+  const iconSource = document.getElementById('icon-edit-mode');
+  const iconPreview = document.getElementById('icon-preview-mode');
+  const modeLabel = document.getElementById('mode-toggle-label');
+  const noteModeDisplay = document.getElementById('note-mode');
+  const btnToggleMode = document.getElementById('btn-toggle-mode');
+  if (mode === 'source') {
+    // 当前在源码模式 → 按钮提示「点我去预览」
+    if (iconSource) iconSource.style.display = '';
+    if (iconPreview) iconPreview.style.display = 'none';
+    if (modeLabel) modeLabel.textContent = '预览';
+    if (noteModeDisplay) noteModeDisplay.textContent = '源码';
+    if (btnToggleMode) btnToggleMode.classList.remove('active');
+  } else {
+    // 当前在预览模式 → 按钮提示「点我回源码」
+    if (iconSource) iconSource.style.display = 'none';
+    if (iconPreview) iconPreview.style.display = '';
+    if (modeLabel) modeLabel.textContent = '源码';
+    if (noteModeDisplay) noteModeDisplay.textContent = '渲染';
+    if (btnToggleMode) btnToggleMode.classList.add('active');
+  }
 }
 
 // ====== 自定义日历 ======
@@ -904,8 +1170,9 @@ function renderWheelColumn(containerId, value, max, step, setter) {
     item.addEventListener('click', () => { setter(v); renderTimeWheel(); });
     container.appendChild(item);
   }
-  // 垂直居中：4个24px项 + 半个28px选中项 = 110px，容器中心70px → 偏移 -40px
-  container.style.marginTop = '-40px';
+  // B6 修复：原 -40px 是 magic number（容器高 140px，左右各 4 个 24px 项 + 选中 28px 居中需要 -15px，
+  // 旧值 -40px 是为放大选中项预留了视觉空间）。改为读 CSS 变量 --tw-center-offset
+  container.style.marginTop = 'var(--tw-center-offset, -40px)';
 }
 
 function renderTimeWheel() {
@@ -921,13 +1188,24 @@ function setupTimeWheel() {
 
   for (const col of cols) {
     const el = document.getElementById(col.id);
+    // B12 修复：原 wheel 事件直接更新 state + renderTimeWheel()，快速滚动会触发 N 次 setState。
+    // 用 requestAnimationFrame 节流 + 累加 deltaY 防止单次大滚动跳过多个值
+    let rafId = null;
+    let pendingDelta = 0;
     el.addEventListener('wheel', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      const dir = e.deltaY > 0 ? 1 : -1;
-      const current = col.getter();
-      let next = ((current + dir * col.step) % col.max + col.max) % col.max;
-      col.setter(next);
+      pendingDelta += e.deltaY;
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        // 一次 raf 内累积的滚动量：每 50px 跳一格
+        const steps = Math.sign(pendingDelta) * Math.min(3, Math.max(1, Math.abs(pendingDelta) / 50 | 0));
+        const current = col.getter();
+        const next = ((current + steps * col.step) % col.max + col.max) % col.max;
+        col.setter(next);
+        pendingDelta = 0;
+      });
     }, { passive: false });
   }
 }
@@ -954,6 +1232,12 @@ function scheduleSave() {
   clearTimeout(saveTimer);
   const status = document.getElementById('note-status');
   if (status) status.textContent = '保存中…';
+  // A7 修复：调度时立刻快照当前选中笔记和 filePath，
+  // 避免 500ms 延迟期间用户切走笔记导致 saveFile 写到错误文件
+  const snapshotId = state.selectedId;
+  const snapshotNote = state.notes.find(n => n.id === snapshotId);
+  const snapshotFilePath = snapshotNote ? snapshotNote.filePath : null;
+  const snapshotBody = snapshotNote ? snapshotNote.body : null;
   saveTimer = setTimeout(async () => {
     await window.electronAPI.saveData({ notes: state.notes, reminders: state.reminders.filter(r => !r.done) });
     // 如果有文件关联，同步写回 .md 文件
@@ -974,6 +1258,11 @@ function updateSidebarItem(id, title) {
 
 function escapeHtml(text) { const d = document.createElement('div'); d.textContent = text; return d.innerHTML; }
 
+// A3 修复：原 Date.now().toString() 1ms 内连建会撞 id。改用时间戳 + 随机后缀
+function genNoteId() {
+  return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+}
+
 function formatTime(iso) {
   if (!iso) return '';
   const d = new Date(iso), now = new Date(), diff = now - d;
@@ -989,21 +1278,48 @@ function formatDateTime(iso) {
   return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
 
-// ====== 双滑块：不透明度 + 模糊度 ======
+// ====== 不透明度滑块 ======
 function applyPanelAlpha(percent) {
   const root = document.documentElement;
   const alpha = Math.max(0.05, Math.min(1, percent / 100));
-  const isDark = root.getAttribute('data-theme') === 'dark';
+  const currentTheme = root.getAttribute('data-theme');
+  const currentMode = root.getAttribute('data-mode') || 'light';
+  const isDarkMode = currentMode === 'dark';
+  const flag = isFlagTheme(currentTheme) ? FLAG_THEMES[currentTheme] : null;
 
-  if (isDark) {
-    const mainAlpha = Math.max(alpha - 0.07, 0.05);
-    const barAlpha = Math.min(alpha + 0.07, 1);
+  // 关键：先清掉 --titlebar-bg 的 inline 覆写
+  // 防止状态泄漏：默认主题分支写过 inline rgba(...)，切到旗帜主题时
+  // inline 会屏蔽 CSS 里的 linear-gradient，导致条带消失。
+  // 默认主题分支会重新设这个变量；旗帜主题分支通过 return 保留 CSS 规则
+  root.style.removeProperty('--titlebar-bg');
+
+  // 模糊联动：alpha 越低 → blur 越强
+  const blurFactor = (0.05 - alpha) * (-1 / 0.95) + 1;
+  root.style.setProperty('--panel-alpha-factor', blurFactor.toFixed(3));
+
+  if (flag) {
+    // 旗帜主题：用当前 mode 的基础色 + 用户 alpha
+    const modeKey = isDarkMode ? 'dark' : 'light';
+    // 浅色旗帜：侧栏用主区域基础色（更亮更不透明），保证文字可读；
+    //          暗色旗帜：保持原旗帜色调（深色背景下橙/青有强对比）
+    const sidebarRgb = isDarkMode ? flag.sidebar[modeKey] : flag.main[modeKey];
+    const sidebarA = isDarkMode ? alpha * 0.85 : Math.max(alpha * 0.85, 0.55);
+    const mainA = Math.max((isDarkMode ? alpha : alpha * 0.92), 0.10);
+    root.style.setProperty('--sidebar-bg', `rgba(${sidebarRgb}, ${sidebarA})`);
+    root.style.setProperty('--main-bg', `rgba(${flag.main[modeKey]}, ${mainA})`);
+    // 标题栏保留 CSS 里的 linear-gradient（不被覆盖）
+    return;
+  }
+
+  // 默认主题：按 data-mode 选基础色（必须用 data-mode，不能用模块级 isDark，
+  // 否则 cycleMode 切换后 isDark 仍指向 init 时的值，背景永远是错色）
+  const mainAlpha = Math.max(alpha - 0.07, 0.05);
+  const barAlpha = Math.min((isDarkMode ? alpha + 0.07 : alpha + 0.1), 1);
+  if (isDarkMode) {
     root.style.setProperty('--sidebar-bg', `rgba(28, 28, 28, ${alpha})`);
     root.style.setProperty('--main-bg', `rgba(36, 36, 36, ${mainAlpha})`);
     root.style.setProperty('--titlebar-bg', `rgba(28, 28, 28, ${barAlpha})`);
   } else {
-    const mainAlpha = Math.max(alpha - 0.07, 0.05);
-    const barAlpha = Math.min(alpha + 0.1, 1);
     root.style.setProperty('--sidebar-bg', `rgba(243, 243, 243, ${alpha})`);
     root.style.setProperty('--main-bg', `rgba(252, 252, 252, ${mainAlpha})`);
     root.style.setProperty('--titlebar-bg', `rgba(243, 243, 243, ${barAlpha})`);
@@ -1030,8 +1346,9 @@ function setupSettings() {
     // 侧栏切换
     sidebarHeader.style.display = 'none';
     noteList.style.display = 'none';
-    settingsNav.style.display = 'block';
-    // 主区域切换
+    settingsNav.style.display = 'flex';
+    // 主区域切换 —— 用 data-view + inline style 双保险
+    setMainView('settings');
     document.getElementById('empty-state').style.display = 'none';
     document.getElementById('note-editor').style.display = 'none';
     settingsSection.style.display = 'flex';
@@ -1045,21 +1362,34 @@ function setupSettings() {
     noteList.style.display = '';
     settingsNav.style.display = 'none';
     settingsSection.style.display = 'none';
-    if (state.selectedId) renderEditor(state.selectedId);
-    else document.getElementById('empty-state').style.display = 'block';
+    if (state.selectedId) {
+      setMainView('editor');
+      renderEditor(state.selectedId);
+    } else {
+      setMainView('empty');
+      document.getElementById('empty-state').style.display = 'flex';
+    }
   }
 
   function switchSettingsSection(section) {
     // 高亮导航
     document.querySelectorAll('.settings-nav-item').forEach(i =>
       i.classList.toggle('active', i.dataset.section === section));
-    // 切换页面
-    document.querySelectorAll('.settings-page').forEach(p => p.style.display = 'none');
+    // 切换页面 —— 用 .active class 控制，配合 CSS 防御
+    document.querySelectorAll('.settings-page').forEach(p => {
+      p.classList.remove('active');
+      p.style.display = 'none';
+    });
     const page = document.getElementById('section-' + section);
-    if (page) page.style.display = 'flex';
+    if (page) {
+      page.classList.add('active');
+      page.style.display = 'flex';
+    }
     // 同步高亮选项
     document.querySelectorAll('.settings-option[data-action="theme"]').forEach(b =>
       b.classList.toggle('active', b.dataset.value === currentThemePref));
+    document.querySelectorAll('.settings-option[data-action="mode"]').forEach(b =>
+      b.classList.toggle('active', b.dataset.value === currentModePref));
     document.querySelectorAll('.settings-option[data-action="appearance"]').forEach(b =>
       b.classList.toggle('active', b.dataset.value === currentAppearance));
     // 同步滑块
@@ -1166,8 +1496,23 @@ function setupSettings() {
   // 主题切换
   document.querySelectorAll('.settings-option[data-action="theme"]').forEach(btn => {
     btn.addEventListener('click', () => {
-      window.electronAPI.setTheme(btn.dataset.value);
+      currentThemePref = btn.dataset.value;       // 本地立即更新
+      applyTheme();                                // 立即重渲染
+      applyPanelAlpha(currentPanelAlpha);
+      window.electronAPI.setTheme(btn.dataset.value);  // 持久化（异步）
       document.querySelectorAll('.settings-option[data-action="theme"]').forEach(b =>
+        b.classList.toggle('active', b.dataset.value === btn.dataset.value));
+    });
+  });
+
+  // 模式切换（独立于主题）
+  document.querySelectorAll('.settings-option[data-action="mode"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentModePref = btn.dataset.value;        // 本地立即更新
+      applyTheme();                                // 立即重渲染
+      applyPanelAlpha(currentPanelAlpha);
+      window.electronAPI.setMode(btn.dataset.value);  // 持久化 + 通知 OS
+      document.querySelectorAll('.settings-option[data-action="mode"]').forEach(b =>
         b.classList.toggle('active', b.dataset.value === btn.dataset.value));
     });
   });
@@ -1229,6 +1574,109 @@ function setupSettings() {
       }
     }
   });
+
+  // ====== 自定义 CSS ======
+  let customCssStyleEl = null;
+
+  function getDefaultCSS() {
+    // 返回一个简化版默认样式说明，用户可参照编写自定义 CSS
+    return `/* QuickMemo 自定义 CSS 示例 */
+/* 可覆盖 styles.css 中的任何样式 */
+
+/* 示例：修改编辑器背景色 */
+/* .md-editor { background: rgba(255,255,255,0.05); } */
+
+/* 示例：修改标题字体大小 */
+/* .editor-title { font-size: 26px; } */
+
+/* 示例：修改侧栏宽度 */
+/* #sidebar { width: 320px; } */
+
+/* 示例：修改强调色为紫色 */
+/* :root { --accent: #8b5cf6; } */`;
+  }
+
+  function applyCustomCSS(css) {
+    if (!customCssStyleEl) {
+      customCssStyleEl = document.createElement('style');
+      customCssStyleEl.id = 'user-custom-css';
+      document.head.appendChild(customCssStyleEl);
+    }
+    customCssStyleEl.textContent = css || '';
+  }
+
+  function loadCustomCSS() {
+    const textarea = document.getElementById('custom-css-input');
+    if (!textarea) return;
+    // 初始化显示默认模板或已保存的 CSS
+    const saved = settings.customCSS || '';
+    textarea.value = saved || getDefaultCSS();
+  }
+
+  function saveCustomCSS(css) {
+    settings.customCSS = css;
+    applyCustomCSS(css);
+    updateStoredSettings();
+  }
+
+  const customCssInput = document.getElementById('custom-css-input');
+  if (customCssInput) {
+    // 实时预览：每次输入都应用（带防抖）
+    let cssTimer = null;
+    customCssInput.addEventListener('input', () => {
+      clearTimeout(cssTimer);
+      cssTimer = setTimeout(() => {
+        applyCustomCSS(customCssInput.value);
+      }, 200);
+    });
+
+    customCssInput.addEventListener('keydown', (e) => {
+      // Tab 键插入两个空格
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const start = customCssInput.selectionStart;
+        const end = customCssInput.selectionEnd;
+        customCssInput.value = customCssInput.value.substring(0, start) + '  ' + customCssInput.value.substring(end);
+        customCssInput.selectionStart = customCssInput.selectionEnd = start + 2;
+        customCssInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    });
+  }
+
+  const btnSaveCss = document.getElementById('btn-save-css');
+  if (btnSaveCss) {
+    btnSaveCss.addEventListener('click', () => {
+      const css = document.getElementById('custom-css-input').value;
+      saveCustomCSS(css);
+      showToastMessage('自定义 CSS 已保存并应用');
+    });
+  }
+
+  const btnResetCss = document.getElementById('btn-reset-css');
+  if (btnResetCss) {
+    btnResetCss.addEventListener('click', () => {
+      const textarea = document.getElementById('custom-css-input');
+      if (textarea) textarea.value = getDefaultCSS();
+      applyCustomCSS(getDefaultCSS());
+    });
+  }
+
+  // 应用已保存的 CSS（初始化时加载）
+  if (settings.customCSS) {
+    setTimeout(() => applyCustomCSS(settings.customCSS), 100);
+  }
+}
+
+function showToastMessage(text) {
+  const status = document.getElementById('note-status');
+  if (!status) return;
+  const orig = status.textContent;
+  status.textContent = text;
+  status.style.color = 'var(--accent)';
+  setTimeout(() => {
+    status.textContent = orig;
+    status.style.color = '';
+  }, 2500);
 }
 
 // ====== 确认弹窗 ======
@@ -1307,12 +1755,13 @@ function openNotemsDialog() {
 
     // 创建新笔记
     const note = {
-      id: Date.now().toString(),
+      id: genNoteId(),
       title: key,
       body: content,
       notemsKey: key,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      _autoTitled: true, // notems notes have fixed title
     };
     state.notes.unshift(note);
     selectNote(note.id);
@@ -1322,5 +1771,78 @@ function openNotemsDialog() {
     confirmBtn.textContent = '获取';
   };
 }
+
+// ====== 侧栏拖拽手柄：调整宽度并持久化到 settings ======
+const SIDEBAR_MIN = 240;
+const SIDEBAR_MAX = 520;
+const SIDEBAR_DEFAULT = 280;
+
+function applySidebarWidth(width) {
+  const w = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, Math.round(width)));
+  const app = document.getElementById('app-container');
+  if (app) app.style.setProperty('--sidebar-width', `${w}px`);
+  // resizer 位置 = 侧栏宽（用 CSS 变量同步，避免 JS 计算误差）
+  const resizer = document.getElementById('sidebar-resizer');
+  if (resizer) resizer.style.left = `${w}px`;
+  return w;
+}
+
+function setupSidebarResizer() {
+  const resizer = document.getElementById('sidebar-resizer');
+  if (!resizer) return;
+
+  // 初始化：从 settings 恢复；无则用默认
+  const initial = (settings && typeof settings.sidebarWidth === 'number')
+    ? settings.sidebarWidth
+    : SIDEBAR_DEFAULT;
+  applySidebarWidth(initial);
+
+  let dragging = false;
+  let startX = 0;
+  let startWidth = 0;
+
+  const onPointerDown = (e) => {
+    dragging = true;
+    startX = e.clientX;
+    const app = document.getElementById('app-container');
+    startWidth = app ? parseFloat(getComputedStyle(app).getPropertyValue('--sidebar-width')) || SIDEBAR_DEFAULT : SIDEBAR_DEFAULT;
+    resizer.classList.add('dragging');
+    document.body.classList.add('resizing');
+    try { resizer.setPointerCapture(e.pointerId); } catch {}
+  };
+  const onPointerMove = (e) => {
+    if (!dragging) return;
+    const delta = e.clientX - startX;
+    applySidebarWidth(startWidth + delta);
+  };
+  const onPointerUp = (e) => {
+    if (!dragging) return;
+    dragging = false;
+    resizer.classList.remove('dragging');
+    document.body.classList.remove('resizing');
+    try { resizer.releasePointerCapture(e.pointerId); } catch {}
+    // 持久化到 settings
+    const app = document.getElementById('app-container');
+    if (app) {
+      const w = parseFloat(getComputedStyle(app).getPropertyValue('--sidebar-width')) || SIDEBAR_DEFAULT;
+      settings.sidebarWidth = w;
+      scheduleSave();
+    }
+  };
+
+  resizer.addEventListener('pointerdown', onPointerDown);
+  resizer.addEventListener('pointermove', onPointerMove);
+  resizer.addEventListener('pointerup', onPointerUp);
+  resizer.addEventListener('pointercancel', onPointerUp);
+
+  // 双击重置为默认宽度
+  resizer.addEventListener('dblclick', () => {
+    applySidebarWidth(SIDEBAR_DEFAULT);
+    settings.sidebarWidth = SIDEBAR_DEFAULT;
+    scheduleSave();
+  });
+}
+
+
 
 init();
