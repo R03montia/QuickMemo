@@ -163,7 +163,8 @@
 }
 
 :root[data-theme="sunset"],
-:root[data-theme="ocean"] {
+:root[data-theme="ocean"],
+:root[data-theme="bloom"] {
   --titlebar-fg: #ffffff;
   --titlebar-fg-secondary: rgba(255, 255, 255, 0.88);
   --titlebar-btn-hover: rgba(255, 255, 255, 0.15);
@@ -186,6 +187,11 @@
   --titlebar-overlay: rgba(0, 0, 0, 0.42);
 }
 
+/* bloom 霞光浅色条带也需要加强蒙版 */
+:root[data-theme="bloom"] {
+  --titlebar-overlay: rgba(0, 0, 0, 0.40);
+}
+
 /* === 彩色主题 brand-mark：渲染 mini 渐变做装饰 === */
 :root[data-theme="sunset"] .brand-mark {
   background: linear-gradient(135deg,
@@ -199,10 +205,17 @@
   color: #ffffff !important;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.30), inset 0 0 0 1px rgba(255, 255, 255, 0.18) !important;
 }
+:root[data-theme="bloom"] .brand-mark {
+  background: linear-gradient(135deg,
+    #b83555 0%, #d45072 28%, #e87090 50%, #60c0b0 72%, #50b8b8 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.30), inset 0 0 0 1px rgba(255, 255, 255, 0.18) !important;
+}
 
 /* 彩色主题下 brand-tag：深色实心底 + 白字（不被彩色条带吞掉） */
 :root[data-theme="sunset"] .brand-tag,
-:root[data-theme="ocean"] .brand-tag {
+:root[data-theme="ocean"] .brand-tag,
+:root[data-theme="bloom"] .brand-tag {
   background: rgba(0, 0, 0, 0.32);
   color: #ffffff;
   text-shadow: none;
@@ -370,6 +383,88 @@
   --glass-specular: rgba(140, 200, 240, 0.20);
   --glass-iris-1: rgba(0, 53, 102, 0.25);
   --glass-iris-2: rgba(0, 53, 102, 0.10);
+}
+
+/* ========== 霞光 — 霞光 ========== */
+
+/* 浅色（朝霞 / 樱云） */
+:root[data-theme="bloom"][data-mode="light"] {
+  --accent: #e85478;
+  --accent-hover: #d04268;
+  --accent-soft: rgba(232, 84, 120, 0.15);
+  --accent-on-dark: #ffb8c8;
+
+  --bg: #fff0f4;
+  --sidebar-bg: rgba(240, 150, 175, 0.22);
+  --main-bg: rgba(255, 245, 248, 0.94);
+  --titlebar-bg: linear-gradient(90deg,
+    #b83555 0%, #b83555 20%,
+    #d45072 20%, #d45072 40%,
+    #e87090 40%, #e87090 60%,
+    #60c0b0 60%, #60c0b0 80%,
+    #50b8b8 80%, #50b8b8 100%
+  );
+  --text: #2a0812;
+  --text-secondary: #703040;
+  --text-muted: #a06878;
+  --border: rgba(232, 84, 120, 0.20);
+  --border-strong: rgba(232, 84, 120, 0.35);
+  --item-hover: rgba(232, 84, 120, 0.14);
+  --item-active: rgba(232, 84, 120, 0.26);
+  --shadow-sm: 0 1px 2px rgba(184, 53, 85, 0.12);
+  --shadow: 0 4px 16px rgba(184, 53, 85, 0.18);
+  --shadow-lg: 0 12px 40px rgba(184, 53, 85, 0.25);
+  --shadow-fab: 0 8px 28px rgba(184, 53, 85, 0.30), 0 2px 6px rgba(0, 0, 0, 0.08);
+  --shadow-fab-hover: 0 14px 40px rgba(184, 53, 85, 0.38), 0 2px 8px rgba(0, 0, 0, 0.10);
+  --scrollbar: rgba(212, 80, 114, 0.28);
+  --scrollbar-hover: rgba(212, 80, 114, 0.48);
+  --glass-tint: rgba(240, 170, 190, 0.46);
+  --glass-tint-strong: rgba(240, 170, 190, 0.68);
+  --glass-edge: rgba(232, 84, 120, 0.60);
+  --glass-edge-soft: rgba(232, 84, 120, 0.32);
+  --glass-specular: rgba(255, 225, 235, 0.75);
+  --glass-iris-1: rgba(212, 80, 114, 0.22);
+  --glass-iris-2: rgba(212, 80, 114, 0.08);
+}
+
+/* 暗色（夜樱 / 暮霞） */
+:root[data-theme="bloom"][data-mode="dark"] {
+  --accent: #ff8fa5;
+  --accent-hover: #ffa0b5;
+  --accent-soft: rgba(255, 143, 165, 0.20);
+  --accent-on-dark: #ffc0d0;
+
+  --bg: #1a0610;
+  --sidebar-bg: rgba(70, 18, 32, 0.90);
+  --main-bg: rgba(40, 12, 22, 0.94);
+  --titlebar-bg: linear-gradient(90deg,
+    #501020 0%, #501020 20%,
+    #701830 20%, #701830 40%,
+    #902848 20%, #902848 40%,
+    #2a5858 60%, #2a5858 80%,
+    #1a4848 80%, #1a4848 100%
+  );
+  --text: #ffe0e8;
+  --text-secondary: #d0a0b0;
+  --text-muted: #907078;
+  --border: rgba(255, 143, 165, 0.26);
+  --border-strong: rgba(255, 143, 165, 0.46);
+  --item-hover: rgba(255, 143, 165, 0.12);
+  --item-active: rgba(255, 143, 165, 0.24);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 12px 40px rgba(144, 40, 72, 0.45);
+  --shadow-fab: 0 8px 28px rgba(0, 0, 0, 0.7), 0 2px 6px rgba(144, 40, 72, 0.35);
+  --shadow-fab-hover: 0 14px 40px rgba(0, 0, 0, 0.8), 0 2px 8px rgba(144, 40, 72, 0.45);
+  --scrollbar: rgba(255, 143, 165, 0.35);
+  --scrollbar-hover: rgba(255, 143, 165, 0.55);
+  --glass-tint: rgba(90, 22, 40, 0.55);
+  --glass-tint-strong: rgba(90, 22, 40, 0.75);
+  --glass-edge: rgba(255, 143, 165, 0.30);
+  --glass-edge-soft: rgba(255, 143, 165, 0.15);
+  --glass-specular: rgba(255, 180, 200, 0.24);
+  --glass-iris-1: rgba(144, 40, 72, 0.28);
+  --glass-iris-2: rgba(144, 40, 72, 0.12);
 }
 
 /* ============================================================
@@ -937,7 +1032,7 @@ body {
   z-index: 0;
 }
 
-/* 顶栏装饰条（中央 32px 灰条，hover 变高亮蓝，提示这里可拖） */
+/* 顶栏装饰条（中央 32px 主题色条，hover 加亮加宽，提示这里可拖） */
 [data-appearance="borderless"] .drag-region::after {
   content: '';
   position: absolute;
@@ -946,15 +1041,14 @@ body {
   transform: translate(-50%, -50%);
   width: 32px;
   height: 2px;
-  background: var(--text-muted);
+  background: var(--accent);
   border-radius: 1px;
-  opacity: 0.4;
+  opacity: 0.35;
   pointer-events: none;
-  transition: opacity var(--t-fast), background var(--t-fast), width var(--t-fast);
+  transition: opacity var(--t-fast), width var(--t-fast);
 }
 [data-appearance="borderless"] .drag-region:hover::after {
   opacity: 1;
-  background: var(--accent);
   width: 48px;
 }
 

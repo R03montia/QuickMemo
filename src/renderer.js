@@ -241,6 +241,11 @@ const FLAG_THEMES = {
     sidebar: { light: '57, 204, 204',  dark: '8, 18, 35' },
     main:    { light: '240, 250, 255', dark: '5, 12, 25' },
   },
+  bloom: {
+    accent: { light: '#e85478', dark: '#ff8fa5' },
+    sidebar: { light: '240, 150, 175', dark: '70, 18, 32' },
+    main:    { light: '255, 245, 248', dark: '40, 12, 22' },
+  },
 };
 
 function isFlagTheme(theme) {
@@ -523,6 +528,11 @@ function setupContextMenu() {
           MarkdownEditor.destroy();
           MarkdownEditor.init(bodyContainer, content, note.markdownEnabled);
           registerEditorCallbacks();
+          // 同步模式切换按钮可见性
+          const ft = document.getElementById('footer-mode-toggle');
+          const nm = document.getElementById('note-mode');
+          if (ft) ft.style.display = note.markdownEnabled ? '' : 'none';
+          if (nm) nm.style.display = note.markdownEnabled ? '' : 'none';
         }
         renderSidebar();
       }
@@ -675,6 +685,9 @@ function renderSidebar() {
     const last = list.lastChild;
     if (last) { noteElCache.delete(last.dataset.id); last.remove(); }
   }
+  // 更新笔记计数
+  const countEl = document.getElementById('sidebar-count');
+  if (countEl) countEl.textContent = state.notes.length;
 }
 
 function deleteMultiNotes() {
@@ -809,6 +822,9 @@ function renderEditor(id) {
   // 每次切换笔记后重新注册编辑器回调（因为 DOM 已被替换）
   registerEditorCallbacks();
 
+  // 更新字数统计
+  updateCharCount(note.body || '');
+
   // 同步 FAB-reminder 可见性（fabReminder 已在函数顶部声明）
   if (fabReminder) fabReminder.style.display = '';
 
@@ -833,6 +849,12 @@ function renderEditor(id) {
   } else {
     refreshBtn.style.display = 'none';
   }
+
+  // Markdown 未开启时隐藏模式切换按钮和模式标识
+  const footerToggle = document.getElementById('footer-mode-toggle');
+  const noteModeEl = document.getElementById('note-mode');
+  if (footerToggle) footerToggle.style.display = useMarkdown ? '' : 'none';
+  if (noteModeEl) noteModeEl.style.display = useMarkdown ? '' : 'none';
 }
 
 function setupNewNote() {
@@ -884,6 +906,7 @@ function registerEditorCallbacks() {
     if (!note) return;
     note.body = MarkdownEditor.getContent(bodyContainer);
     autoTitle(note);
+    updateCharCount(note.body || '');
     scheduleSave();
   });
 
@@ -1317,6 +1340,14 @@ function formatDateTime(iso) {
   if (!iso) return '';
   const d = new Date(iso);
   return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+// ====== 字数统计 ======
+function updateCharCount(text) {
+  const el = document.getElementById('note-charcount');
+  if (!el) return;
+  const len = (text || '').replace(/\s/g, '').length;
+  el.textContent = len + ' 字';
 }
 
 // ====== 不透明度滑块 ======

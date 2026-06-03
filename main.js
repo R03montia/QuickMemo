@@ -232,6 +232,7 @@ function updateTrayMenu() {
         { label: ' 默认',     type: 'radio', checked: theme === 'default', click: () => setTheme('default') },
         { label: ' 夕阳',     type: 'radio', checked: theme === 'sunset',  click: () => setTheme('sunset') },
         { label: ' 海洋',     type: 'radio', checked: theme === 'ocean',   click: () => setTheme('ocean') },
+        { label: ' 霞光',     type: 'radio', checked: theme === 'bloom',   click: () => setTheme('bloom') },
       ],
     },
     {

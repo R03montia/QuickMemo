@@ -1,7 +1,7 @@
 // markdown-editor.js — 双模式 Markdown 编辑器
 //   - 'source'  模式：textarea，显示原始 Markdown 源码，可编辑
-//   - 'preview' 模式：div，显示渲染后的 Markdown，只读
-//   切换模式时保留内容；预览始终基于 state.notes[i].body 重新渲染。
+//   - 'preview' 模式：只读 div，显示渲染后的 Markdown
+//   切换模式时保留内容；预览始终基于源内容重新渲染。
 const MarkdownEditor = (() => {
   let container = null;
   let currentMode = 'source'; // 'source' | 'preview'
@@ -104,7 +104,10 @@ const MarkdownEditor = (() => {
     });
 
     container._getContent = () => textarea.value;
-    container._setContent = (val) => { textarea.value = val || ''; };
+    container._setContent = (val) => {
+      textarea.value = val || '';
+      container._lastSourceContent = val || '';
+    };
     container._onChange = (fn) => { textarea.addEventListener('input', fn); };
     container._scrollTarget = () => textarea;
 
@@ -121,8 +124,7 @@ const MarkdownEditor = (() => {
     root.appendChild(div);
     scrollEl = div;
 
-    // 拦截 <a> 点击：阻止默认跳转（会改 window.location 让整个 app 消失），
-    // 转交给主进程用系统浏览器打开。
+    // 拦截 <a> 点击：阻止默认跳转，转交系统浏览器打开
     div.addEventListener('click', (e) => {
       const a = e.target.closest('a');
       if (!a || !a.href) return;
@@ -133,16 +135,12 @@ const MarkdownEditor = (() => {
       }
     });
 
-    container._getContent = () => {
-      // 预览是只读的，但 getContent 必须返回当前内容以便切换模式时不丢失
-      // 由于预览不会修改源，直接返回上次的 source 即可
-      return container._lastSourceContent || '';
-    };
+    container._getContent = () => container._lastSourceContent || '';
     container._setContent = (val) => {
       container._lastSourceContent = val || '';
       div.innerHTML = renderMarkdown(val || '');
     };
-    container._onChange = () => { /* 预览只读，无变化 */ };
+    container._onChange = () => {};
     container._scrollTarget = () => div;
   }
 
