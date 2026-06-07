@@ -2382,3 +2382,133 @@ body.resizing * { cursor: col-resize !important; user-select: none !important; }
   }
   .empty-illustration { animation: none; }
 }
+
+/* ====== AI 设置 ====== */
+.setting-item {
+  margin-bottom: 20px;
+}
+.setting-item .text-input {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 6px;
+}
+.setting-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.setting-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 4px 0 0;
+  line-height: 1.4;
+}
+.setting-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+}
+.setting-checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+.ai-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 24px;
+}
+.ai-status {
+  margin-top: 12px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.ai-status-ok {
+  color: var(--accent);
+}
+.ai-status-err {
+  color: #e74c3c;
+}
+
+/* ====== Toast 通知 ====== */
+.toast-container {
+  position: fixed;
+  top: 60px;
+  right: 20px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast {
+  padding: 10px 18px;
+  border-radius: var(--r);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-lg);
+  font-size: 13px;
+  color: var(--text);
+  max-width: 360px;
+  word-break: break-all;
+  transform: translateX(120%);
+  opacity: 0;
+  transition: transform 0.3s var(--ease), opacity 0.3s var(--ease);
+  pointer-events: auto;
+}
+
+.toast-visible {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.toast-hiding {
+  transform: translateX(120%);
+  opacity: 0;
+}
+
+.toast-ok {
+  border-left: 3px solid var(--accent);
+}
+
+.toast-err {
+  border-left: 3px solid #e74c3c;
+}
+
+.toast-info {
+  border-left: 3px solid #3498db;
+}
+
+/* ====== AI 按钮加载动画 ====== */
+#btn-ai-title.loading {
+  position: relative;
+  color: transparent !important;
+  pointer-events: none;
+}
+
+#btn-ai-title.loading::after {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border: 2px solid var(--text-muted);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: ai-spin 0.6s linear infinite;
+}
+
+@keyframes ai-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ====== 暗色适配 ====== */
+[data-theme="dark"] .toast {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
