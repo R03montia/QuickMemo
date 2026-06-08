@@ -52,3 +52,11 @@ coverage/
 # ===== TypeScript / 构建产物 =====
 *.tsbuildinfo
 .tscache/
+
+# ===== 启动脚本 =====
+start.bat
+start.ps1
+
+# ===== 压缩包 =====
+*.7z
+

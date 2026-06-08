@@ -119,6 +119,10 @@
           <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H4z" rx="2"/><path d="M8 8h8M8 11h5"/></svg>
           <span>自定义 CSS</span>
         </div>
+        <div class="settings-nav-item" data-section="ai">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5L12 2z"/><circle cx="6" cy="16" r="2"/><circle cx="16" cy="16" r="2"/></svg>
+          <span>AI 总结</span>
+        </div>
       </nav>
 
       <!-- 侧栏底部：设置入口 -->
@@ -315,6 +319,43 @@
             </div>
           </div>
         </div>
+
+        <div id="section-ai" class="settings-page" style="display:none;">
+          <div class="settings-page-header">
+            <h3>AI 总结</h3>
+            <p>使用大模型自动为备忘录生成标题，保存时触发</p>
+          </div>
+          <div class="settings-page-body">
+            <div class="setting-item">
+              <label class="setting-label">API 地址 (Base URL)</label>
+              <input type="text" id="ai-base-url" class="text-input" placeholder="例如：https://api.openai.com" spellcheck="false" autocomplete="off">
+              <p class="setting-hint">兼容 OpenAI API 格式的端点地址</p>
+            </div>
+            <div class="setting-item">
+              <label class="setting-label">API Key</label>
+              <input type="password" id="ai-api-key" class="text-input" placeholder="sk-..." spellcheck="false" autocomplete="off">
+              <p class="setting-hint">API 密钥，仅保存在本地</p>
+            </div>
+            <div class="setting-item">
+              <label class="setting-label">模型名称</label>
+              <input type="text" id="ai-model-name" class="text-input" placeholder="例如：gpt-4o-mini" spellcheck="false" autocomplete="off">
+              <p class="setting-hint">要使用的模型标识符</p>
+            </div>
+            <div class="setting-item">
+              <label class="setting-checkbox-label">
+                <input type="checkbox" id="ai-auto-title">
+                <span>保存时自动生成标题</span>
+              </label>
+              <p class="setting-hint">关闭后需要手动在设置中点击「生成标题」按钮</p>
+            </div>
+            <div class="ai-actions">
+              <button id="btn-test-llm" class="btn btn-secondary">测试连接</button>
+              <button id="btn-save-ai-settings" class="btn btn-primary">保存设置</button>
+            </div>
+            <p id="ai-status" class="ai-status"></p>
+          </div>
+        </div>
+
       </div>
 
       <!-- 编辑器 -->
@@ -331,6 +372,9 @@
               <button id="btn-refresh-notems" class="icon-btn" title="从 note.ms 刷新" aria-label="从 note.ms 刷新" style="display:none;">
                 <svg class="icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 10a7 7 0 0 1-14 0M3 7V3h4"/><path d="M3 3l4 4"/></svg>
               </button>
+            <button id="btn-ai-title" class="icon-btn" title="AI 生成标题" aria-label="AI 生成标题" style="display:none;">
+              <svg class="icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5L12 2z"/><circle cx="6" cy="16" r="2"/><circle cx="16" cy="16" r="2"/></svg>
+            </button>
 
               <button id="btn-reminder" class="btn btn-secondary" title="设置提醒">
                 <svg class="btn-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7A5 5 0 0 0 5 7c0 5.5-2.5 7.5-2.5 7.5h15S15 12.5 15 7"/><path d="M11.4 16.5a1.5 1.5 0 0 1-2.8 0"/></svg>
@@ -457,5 +501,8 @@
   <script src="../assets/marked.umd.js"></script>
   <script src="markdown-editor.js"></script>
   <script src="renderer.js"></script>
+  <!-- =========== Toast 容器 =========== -->
+  <div id="toast-container" class="toast-container"></div>
 </body>
+  
 </html>

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Notification, nativeTheme, systemPreferences, Tray, Menu, nativeImage, net, globalShortcut, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, Notification, nativeTheme, systemPreferences, Tray, Menu, nativeImage, net, globalShortcut, shell, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const net_module = require('net');
@@ -505,6 +505,67 @@ ipcMain.handle('export-markdown-file', async (_, { filename, content }) => {
     return { ok: false, error: e.message };
   }
 });
+// ====== LLM API 调用 ======
+ipcMain.handle('call-llm', async (_, { base_url, model_name, api_key, prompt }) => {
+  try {
+    let url = base_url.trim().replace(/\/+$/, '');
+    if (!url.endsWith('/chat/completions')) {
+      if (!url.endsWith('/v1')) url += '/v1';
+      url += '/chat/completions';
+    }
+    const resp = await net.fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + api_key,
+      },
+      body: JSON.stringify({
+        model: model_name,
+        messages: [
+          { role: 'system', content: '你是一个标题生成助手。根据用户提供的备忘录内容，生成一个简洁、准确的中文标题（不超过20个字）。只输出标题本身，不要有任何解释或额外内容。' },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.3,
+        max_tokens: 50,
+      }),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => '');
+      return { ok: false, error: `HTTP ${resp.status}: ${errText.slice(0, 200)}` };
+    }
+    const data = await resp.json();
+    const title = data.choices?.[0]?.message?.content?.trim() || '';
+    return { ok: true, title };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+// ====== API Key 安全存储 ======
+ipcMain.handle('encrypt-string', (_, plaintext) => {
+  try {
+    if (!safeStorage.isEncryptionAvailable()) {
+      return { ok: false, error: 'Encryption not available on this system' };
+    }
+    const encrypted = safeStorage.encryptString(plaintext);
+    return { ok: true, encrypted: encrypted.toString('hex') };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+ipcMain.handle('decrypt-string', (_, hex) => {
+  try {
+    if (!safeStorage.isEncryptionAvailable()) {
+      return { ok: false, error: 'Encryption not available on this system' };
+    }
+    const decrypted = safeStorage.decryptString(Buffer.from(hex, 'hex'));
+    return { ok: true, plaintext: decrypted };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
 
 // ====== Note.ms 集成 ======
 ipcMain.handle('notems-get', async (_, key) => {
