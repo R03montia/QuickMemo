@@ -123,6 +123,10 @@
           <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5L12 2z"/><circle cx="6" cy="16" r="2"/><circle cx="16" cy="16" r="2"/></svg>
           <span>AI 总结</span>
         </div>
+              <div class="settings-nav-item" data-section="about">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7.5"/><line x1="10" y1="7.5" x2="10" y2="11.5"/><circle cx="10" cy="14" r="0.75"/></svg>
+          <span>关于</span>
+        </div>
       </nav>
 
       <!-- 侧栏底部：设置入口 -->
@@ -134,12 +138,20 @@
           </svg>
           <span class="btn-label">设置</span>
         </button>
-      </div>
+      
+        <button id="btn-usage" class="btn btn-ghost btn-settings" aria-label="使用统计" title="使用统计">
+          <svg class="btn-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2 18l5-6 4 4 7-8"/>
+            <path d="M16 6h2v4"/>
+          </svg>
+          <span class="btn-label">统计</span>
+        </button></div>
     </aside>
 
     <!-- =========== 主内容区 =========== -->
     <main id="main-content" class="main">
-      <div id="main-drag" class="drag-region"></div>
+      <div id="main-drag" class="drag-region">
+        </div>
 
       <!-- 空状态 -->
       <div id="empty-state" class="empty-state">
@@ -168,7 +180,10 @@
         </div>
       </div>
 
-      <!-- 设置面板 -->
+      <!-- 使用统计 -->
+      <div id="usage-section" class="usage-section" style="display:none;">
+      </div>
+<!-- 设置面板 -->
       <div id="settings-section" class="settings-section" style="display:none;">
         <div id="section-theme" class="settings-page">
           <div class="settings-page-header">
@@ -354,6 +369,44 @@
             </div>
             <p id="ai-status" class="ai-status"></p>
           </div>
+        </div>
+                <div id="section-about" class="settings-page" style="display:none;">
+          <div class="settings-page-body about-content" style="padding-top:20px;">
+            <div class="about-section" style="text-align:center;">
+              <div class="about-logo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="width:48px;height:48px;opacity:0.7;">
+                  <path d="M7 4h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/>
+                  <polyline points="14 4 14 9 19 9"/>
+                  <line x1="9" y1="14" x2="15" y2="14"/>
+                  <line x1="9" y1="17" x2="13" y2="17"/>
+                </svg>
+              </div>
+              <h4 class="about-title" style="margin:0 0 4px 0;font-size:18px;font-weight:700;">QuickMemo</h4>
+              <p class="about-version" style="margin:0 0 4px 0;font-size:12px;color:var(--text-muted);font-family:var(--font-mono);">版本 1.0.0</p>
+              <p class="about-desc" style="margin:8px 0 0 0;font-size:13px;line-height:1.6;color:var(--text-secondary);">Windows 11 风格快速备忘录，支持 Markdown 编辑、提醒事项、AI 标题生成与 Token 使用统计。</p>
+            </div>
+            <div class="about-section">
+              <h4>致谢</h4>
+              <div class="about-credit">
+                <div class="credit-item">
+                  <span class="credit-role">原作者</span>
+                  <span class="credit-name">R03montia</span>
+                </div>
+                <div class="credit-item">
+                  <span class="credit-role">改寫 &amp; 维护</span>
+                  <span class="credit-name">Shiorange</span>
+                </div>
+                <div class="credit-item">
+                  <span class="credit-role">Token 统计引擎</span>
+                  <span class="credit-name"><a href="https://github.com/nicepkg/tokdash" target="_blank">Tokdash</a> by Jingbiao Mei</span>
+                </div>
+              </div>
+            </div>
+            <div class="about-section about-tech">
+              <h4>技术栈</h4>
+              <p>Electron · HTML/CSS/JavaScript · Marked · FastAPI · uvicorn · Python</p>
+            </div>
+          </div>
         </div>
 
       </div>
@@ -506,3 +559,8 @@
 </body>
   
 </html>
+
+
+
+
+
