@@ -9,6 +9,11 @@ let mainWindow = null;
 let tray = null;
 let reminderTimers = new Map();
 
+// ====== Tokdash Data Server ======
+let tokdashProcess = null;
+const TOKDASH_PORT = 55423;
+
+
 function ensureDataFile() {
   if (!fs.existsSync(DATA_FILE)) {
     fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
@@ -372,6 +377,7 @@ if (!gotTheLock) {
 
     // 注册 before-quit（必须在 app.isReady() 之后才能使用 globalShortcut）
     app.on('before-quit', () => {
+      stopTokdash();
       app.isQuitting = true;
       try { globalShortcut.unregisterAll(); } catch {}
     });
@@ -768,10 +774,92 @@ function handleAICommand(cmd, respond) {
 }
 
 // Start AI server after app is ready
+function killTokdashPort() {
+  try {
+    const { execSync } = require("child_process");
+    const out = execSync("netstat -ano | findstr \"127.0.0.1:" + TOKDASH_PORT + "\"", { encoding: "utf-8", timeout: 3000 });
+    out.split(/[\r\n]+/).forEach(line => {
+      const parts = line.trim().split(/\s+/);
+      if (parts.length > 4) {
+        try { process.kill(parseInt(parts[4])); } catch (e) {}
+      }
+    });
+  } catch (e) {}
+}
+
+function startTokdash() {
+  if (tokdashProcess) return;
+  const tm = path.join(__dirname, "tokdash", "cli.py");
+  if (!fs.existsSync(tm)) { console.warn("[QuickMemo] tokdash/cli.py not found in " + __dirname); return; }
+  killTokdashPort();
+  const cmds = process.platform === "win32" ? ["py", "python3", "python"] : ["python3", "python"];
+  function ts(i) {
+    if (i >= cmds.length) { console.warn("[QuickMemo] No Python interpreter found for Tokdash"); return; }
+    try {
+      const p = require("child_process").spawn(cmds[i], ["-m", "tokdash.cli", "--bind", "127.0.0.1", "--port", String(TOKDASH_PORT), "--no-open", "--log-level", "warning"], {
+        cwd: __dirname,
+        env: Object.assign({}, process.env, { TOKDASH_NO_RETENTION_NOTICE: "1", PYTHONUNBUFFERED: "1" }),
+        stdio: "pipe",
+        windowsHide: true
+      });
+      p.on("close", (code) => { tokdashProcess = null; if (code !== 0) console.error("[QuickMemo] Tokdash exited with code", code); });
+      p.on("error", (err) => { console.error("[QuickMemo] Tokdash spawn error:", err.message); if (i < cmds.length - 1) setTimeout(() => ts(i + 1), 1000); });
+      p.stderr.on("data", (d) => { console.error("[QuickMemo] Tokdash stderr:", d.toString().trim()); });
+      p.stdout.on("data", (d) => { console.log("[QuickMemo] Tokdash stdout:", d.toString().trim()); });
+      tokdashProcess = p;
+      console.log("[QuickMemo] Tokdash started with", cmds[i]);
+    } catch (e) {
+      if (i < cmds.length - 1) setTimeout(() => ts(i + 1), 1000);
+    }
+  }
+  ts(0);
+}
+
+function stopTokdash() {
+  if (tokdashProcess) {
+    try { tokdashProcess.kill(); } catch (e) {}
+    tokdashProcess = null;
+  }
+}
 app.whenReady().then(() => {
+  // ====== Tokdash IPC Handlers =====
+  const http = require("http");
+
+  ipcMain.handle("start-tokdash-server", () => {
+    try {
+      startTokdash();
+      return { ok: true };
+    } catch (e) {
+      console.error("[QuickMemo] start-tokdash-server error:", e);
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle("tokdash-fetch", (_, ep) => {
+    return new Promise((resolve) => {
+      const req = http.get("http://127.0.0.1:" + TOKDASH_PORT + ep, (res) => {
+        let body = "";
+        res.on("data", (c) => { body += c; });
+        res.on("end", () => {
+          try { resolve(JSON.parse(body)); } catch (e) { resolve({ error: "parse error" }); }
+        });
+      });
+      req.on("error", () => resolve({ error: "connection refused" }));
+      req.setTimeout(8000, () => { req.destroy(); resolve({ error: "timeout" }); });
+    });
+  });
+
   try {
     startAIServer();
   } catch (e) {
     console.warn('QuickMemo AI server failed to start:', e.message);
   }
 });
+
+
+
+
+
+
+
+

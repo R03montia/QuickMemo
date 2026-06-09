@@ -61,6 +61,11 @@ start.ps1
 *.7z
 
 
+# ===== Python =====
+__pycache__/
+*.pyc
+*.pyo
+
 
 # ===== 临时调试文件 =====
 _clean_main.js
