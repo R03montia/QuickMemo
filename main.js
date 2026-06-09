@@ -826,39 +826,13 @@ app.whenReady().then(() => {
   const http = require("http");
 
   ipcMain.handle("start-tokdash-server", () => {
-    return new Promise((resolve) => {
-      try {
-        startTokdash();
-        // Wait for server to become healthy (up to 20 seconds)
-        let count = 0;
-        const poll = setInterval(() => {
-          count++;
-          const req = http.get("http://127.0.0.1:" + TOKDASH_PORT + "/health", (res) => {
-            let body = "";
-            res.on("data", (c) => { body += c; });
-            res.on("end", () => {
-              try {
-                const j = JSON.parse(body);
-                if (j && j.status === "ok") {
-                  clearInterval(poll);
-                  resolve({ ok: true });
-                }
-              } catch (e) {}
-            });
-          });
-          req.on("error", () => {});
-          req.setTimeout(3000, () => { req.destroy(); });
-          if (count > 40) {
-            clearInterval(poll);
-            console.error("[QuickMemo] Tokdash server start timeout");
-            resolve({ ok: false, error: "Timeout waiting for Tokdash server" });
-          }
-        }, 500);
-      } catch (e) {
-        console.error("[QuickMemo] start-tokdash-server error:", e);
-        resolve({ ok: false, error: e.message });
-      }
-    });
+    try {
+      startTokdash();
+      return { ok: true };
+    } catch (e) {
+      console.error("[QuickMemo] start-tokdash-server error:", e);
+      return { ok: false, error: e.message };
+    }
   });
 
   ipcMain.handle("tokdash-fetch", (_, ep) => {
@@ -881,6 +855,7 @@ app.whenReady().then(() => {
     console.warn('QuickMemo AI server failed to start:', e.message);
   }
 });
+
 
 
 

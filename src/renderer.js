@@ -2190,6 +2190,12 @@ function renderUsage() {
     var comp = d.comparison || {};
     var models = d.top_models || d.coding_models || d.combined_models || [];
     var days = st.contributions || [];
+    var now2 = new Date();
+    var cutoff = new Date(now2);
+    if (_usagePeriod === "7d") cutoff.setDate(now2.getDate() - 7);
+    else if (_usagePeriod === "30d") cutoff.setDate(now2.getDate() - 30);
+    else if (_usagePeriod === "month") cutoff = new Date(now2.getFullYear(), now2.getMonth(), 1);
+    else if (_usagePeriod === "today") cutoff = new Date(now2.getFullYear(), now2.getMonth(), now2.getDate());
 
     function chg(v, prev) {
       if (prev == null || prev === 0) return '<div class="usage-kpi-change neutral">—</div>';
@@ -2229,48 +2235,67 @@ function renderUsage() {
     var pct = d.cache_hit_rate || 0;
 
     var gh = "";
-    if (days && days.length > 0) {
-      var dayLabels = ["一","二","三","四","五","六","日"];
-      gh += '<div class="usage-grid-header">';
-      dayLabels.forEach(function(l) { gh += '<span class="usage-grid-day-label">' + l + "</span>"; });
-      gh += "</div>";
-
-      var weeks = [];
-      var wk = [];
-      var firstDay = new Date(days[0].date);
-      var fdow = firstDay.getDay() || 7;
-      for (var wi = 1; wi < fdow; wi++) wk.push(null);
-      days.forEach(function(e) {
-        var cellDate = new Date(e.date);
-        var tk2 = (e.totals && e.totals.tokens) || e.total_tokens || 0;
-        if (wk.length === 7) { weeks.push(wk); wk = []; }
-        var lv = (e.intensity > 0 && e.intensity <= 4) ? ["empty","lv1","lv2","lv3","lv4"][e.intensity] : tk2 === 0 ? "empty" : tk2 > 100000 ? "lv4" : tk2 > 50000 ? "lv3" : tk2 > 10000 ? "lv2" : "lv1";
-        wk.push({ date: e.date, tokens: tk2, level: lv, day: cellDate.getDate() });
-      });
-      while (wk.length > 0 && wk.length < 7) wk.push(null);
-      if (wk.length > 0) weeks.push(wk);
-
-      weeks.forEach(function(w) {
-        gh += '<div class="usage-grid-row">';
-        w.forEach(function(cell) {
-          if (!cell) { gh += '<div class="usage-grid-cell empty"></div>'; return; }
-          gh += '<div class="usage-grid-cell ' + cell.level + '">';
-          gh += '<div class="usage-grid-tooltip">' + cell.date + ": " + fmtTok(cell.tokens) + " tok</div>";
-          gh += '<span class="usage-grid-date">' + cell.day + "</span></div>";
-        });
-        gh += "</div>";
-      });
-
-      gh += '<div class="usage-grid-labels">';
-      gh += '<span>少</span>';
-      gh += '<div class="usage-grid-legend">';
-      ["empty","lv1","lv2","lv3","lv4"].forEach(function(l) {
-        gh += '<div class="legend-cell ' + l + '"></div>';
-      });
-      gh += "</div>";
-      gh += "<span>多</span></div>";
+    // Full-year GitHub-style contribution grid (53 weeks)
+    var nowDate = new Date();
+    var startDate = new Date(nowDate);
+    startDate.setDate(startDate.getDate() - 370);
+    var sd = startDate.getDay() || 7;
+    if (sd > 1) startDate.setDate(startDate.getDate() - (sd - 1));
+    var dayMap = {};
+    if (st && st.contributions) {
+      st.contributions.forEach(function(e) { dayMap[e.date] = e; });
     }
-
+    var weeks = [];
+    var cursor = new Date(startDate);
+    for (var w = 0; w < 53; w++) {
+      var wk = [];
+      for (var d = 0; d < 7; d++) {
+        var y = cursor.getFullYear();
+        var m = String(cursor.getMonth() + 1).padStart(2, "0");
+        var dd = String(cursor.getDate()).padStart(2, "0");
+        var ds = y + "-" + m + "-" + dd;
+        var en = dayMap[ds] || null;
+        if (en) {
+          var tk2 = (en.totals && en.totals.tokens) || en.total_tokens || 0;
+          var lv = tk2 === 0 ? "empty" : tk2 > 50000000 ? "lv6" : tk2 > 5000000 ? "lv5" : tk2 > 500000 ? "lv4" : tk2 > 50000 ? "lv3" : tk2 > 5000 ? "lv2" : "lv1";
+          wk.push({ date: ds, tokens: tk2, level: lv, month: cursor.getMonth(), year: y });
+        } else { wk.push(null); }
+        cursor.setDate(cursor.getDate() + 1);
+      }
+      weeks.push(wk);
+    }
+    gh += '<div class="gh-grid">';
+    gh += '<div class="gh-months">';
+    var mn = ["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"];
+    var lm = -1;
+    weeks.forEach(function(w, wi) {
+      for (var r = 0; r < 7; r++) {
+        if (w[r] && w[r].month !== lm) {
+          gh += '<span class="gh-month-label" style="grid-row:1;grid-column:' + (wi + 2) + ';">' + mn[w[r].month] + '</span>';
+          lm = w[r].month; break;
+        }
+      }
+    });
+    gh += '</div>';
+    var dl = ["","一","","三","","五",""];
+    for (var row = 0; row < 7; row++) {
+      if (dl[row]) {
+        gh += '<div class="gh-dow" style="grid-row:' + (row + 2) + ';grid-column:1;">' + dl[row] + '</div>';
+      }
+      weeks.forEach(function(w, wi) {
+        var cell = w[row] || null;
+        if (!cell) {
+          gh += '<div class="gh-cell empty" style="grid-row:' + (row + 2) + ';grid-column:' + (wi + 2) + ';"></div>';
+          return;
+        }
+        gh += '<div class="gh-cell ' + cell.level + '" style="grid-row:' + (row + 2) + ';grid-column:' + (wi + 2) + ';" title="' + cell.date + ': ' + fmtTok(cell.tokens) + ' tok"></div>';
+      });
+    }
+    gh += '</div>';
+    gh += '<div class="gh-footer">';
+    gh += '<span class="gh-legend-label">少</span>';
+    ["empty","lv1","lv2","lv3","lv4","lv5","lv6"].forEach(function(l) { gh += '<div class="gh-legend-cell ' + l + '"></div>'; });
+    gh += '<span class="gh-legend-label">多</span></div>';
     c.innerHTML =
       '<div class="usage-header">' +
       '<h2>使用统计</h2>' +
@@ -2297,6 +2322,11 @@ function renderUsage() {
       "</div>" +
       '<div class="usage-section-card"><h3>使用日历</h3><div class="usage-grid">' + gh + "</div></div>" +
       '<div class="usage-section-card"><h3>模型消耗排行</h3>' + mh + "</div>";
+    // Auto-scroll grid to show most recent days
+    setTimeout(function() {
+      var gridEl = c.querySelector('.usage-grid');
+      if (gridEl) gridEl.scrollLeft = gridEl.scrollWidth;
+    }, 100);
   })
   .catch(function() { _usageServerRunning = false; renderUsage(); });
 }
