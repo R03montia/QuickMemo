@@ -573,7 +573,7 @@ function startRename(noteId) {
 function deleteNote(noteId) {
   const note = state.notes.find(n => n.id === noteId);
   if (!note) return;
-  showConfirm('确定要删除「' + (note.title || '未命名') + '」吗？').then(ok => {
+  showConfirm('确定要删除「' + (note.title || '未命名') + '」吗？').then(async ok => {
     if (!ok) return;
     const idx = state.notes.findIndex(n => n.id === noteId);
     if (idx === -1) return;
@@ -801,11 +801,16 @@ function renderEditor(id) {
     pathEl.style.display = 'none';
   }
   // 销毁旧编辑器实例
-  MarkdownEditor.destroy();
+  try { MarkdownEditor.destroy(); } catch (e) { console.warn('MarkdownEditor.destroy error:', e); }
 
   const bodyContainer = document.getElementById('note-body-container');
   const useMarkdown = isMarkdownEnabledForNote(note);
-  MarkdownEditor.init(bodyContainer, note.body || '', useMarkdown);
+  try {
+    MarkdownEditor.init(bodyContainer, note.body || '', useMarkdown);
+  } catch (e) {
+    console.error('MarkdownEditor.init error:', e);
+    bodyContainer.innerHTML = '<textarea style="width:100%;height:100%;background:transparent;color:inherit;border:none;resize:none;padding:8px;font:inherit;">' + (note.body || '').replace(/</g, '&lt;') + '</textarea>';
+  }
 
   // 同步模式切换按钮 UI（注意：updateModeToggleUI 可能在 setupEditor 之前就已被调用，
   // 用 typeof 防御；模块级定义见 setupEditor 上方）
@@ -1287,14 +1292,20 @@ function scheduleSave() {
   clearTimeout(saveTimer);
   const status = document.getElementById('note-status');
   if (status) status.textContent = '保存中…';
-  // A7 修复：调度时立刻快照当前选中笔记和 filePath，
+  // Sync editor content to note.body before scheduling, so snapshot is fresh
+  const bodyContainer = document.getElementById('note-body-container');
+  const currentNote = state.notes.find(n => n.id === state.selectedId);
+  if (currentNote && bodyContainer) {
+    currentNote.body = MarkdownEditor.getContent(bodyContainer);
+  }
+  // A7 修复：调度时立刻快照当前选中笔记和filePath，
   // 避免 500ms 延迟期间用户切走笔记导致 saveFile 写到错误文件
   const snapshotId = state.selectedId;
   const snapshotNote = state.notes.find(n => n.id === snapshotId);
   const snapshotFilePath = snapshotNote ? snapshotNote.filePath : null;
   const snapshotBody = snapshotNote ? snapshotNote.body : null;
   saveTimer = setTimeout(async () => {
-    await window.electronAPI.saveData({ notes: state.notes, reminders: state.reminders.filter(r => !r.done) });
+    await window.electronAPI.saveData({ notes: state.notes, reminders: state.reminders.filter(r => !r.done), settings: settings });
     if (snapshotFilePath) {
       // 用快照时的 body 和 filePath 写入，不读最新的 state.selectedId
       const ok = await window.electronAPI.saveFile(snapshotFilePath, snapshotBody || '');
@@ -1748,14 +1759,14 @@ function setupSettings() {
   const btnSaveAi = document.getElementById('btn-save-ai-settings');
   const btnTestLlm = document.getElementById('btn-test-llm');
 
-  function updateAiButtonVisibility() {
+  function updateAiButtonVisibility() { return; 
     const btn = document.getElementById('btn-ai-title');
     if (btn) {
       btn.style.display = (aiSettings.base_url && aiSettings.api_key && aiSettings.model_name) ? '' : 'none';
     }
   }
 
-  async function loadAiSettings() {
+  async function loadAiSettings() { return; 
     if (settings.aiSettings) {
       aiSettings.base_url = settings.aiSettings.base_url || '';
       aiSettings.model_name = settings.aiSettings.model_name || '';
@@ -1773,7 +1784,7 @@ function setupSettings() {
     if (aiAutoTitle) aiAutoTitle.checked = aiSettings.autoTitle !== false;
   }
 
-  async function saveAiSettings() {
+  async function saveAiSettings() { return; 
     if (aiBaseUrl) aiSettings.base_url = aiBaseUrl.value.trim();
     if (aiApiKey) aiSettings.api_key = aiApiKey.value.trim();
     if (aiModelName) aiSettings.model_name = aiModelName.value.trim();
@@ -1877,7 +1888,7 @@ function showToast(message, type) {
 }
 
 // ====== AI 标题生成 =====
-async function generateAITitle(noteId) {
+async function generateAITitle(noteId) { return; 
   const note = state.notes.find(n => n.id === noteId);
   if (!note || !note.body || !note.body.trim()) {
     showToast('笔记内容为空，无法生成标题', 'err');
@@ -2130,7 +2141,7 @@ function showUsage() {
   if (e) e.style.display = "none";
   if (ed) ed.style.display = "none";
   if (s) s.style.display = "none";
-  if (u) { u.style.display = "block"; setMainView("usage"); renderUsage(); }
+  if (u) { u.style.display = "block"; setMainView("usage"); if (!_usageServerRunning) { renderUsage(); window.electronAPI.tokdashFetch("/api/stats").then(function(r) { if (r && !r.error) { _usageServerRunning = true; renderUsage(); } }); } else { renderUsage(); } }
 }
 
 function hideUsage() {

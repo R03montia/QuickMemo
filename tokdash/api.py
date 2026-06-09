@@ -181,6 +181,12 @@ def _cache_set_if_epoch(key: str, value: Any, epoch: int) -> bool:
         if epoch != _cache_epoch:
             return False
         _cache[key] = (datetime.now().timestamp(), value)
+        # Evict oldest entries when cache exceeds max size (prevents unbounded growth)
+        _MAX_CACHE_SIZE = _positive_int_env("TOKDASH_CACHE_MAX_SIZE", 512)
+        while len(_cache) > _MAX_CACHE_SIZE:
+            oldest_key = min(_cache, key=lambda k: _cache[k][0])
+            del _cache[oldest_key]
+            _key_locks.pop(oldest_key, None)
         return True
 
 

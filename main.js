@@ -11,13 +11,13 @@ let reminderTimers = new Map();
 
 // ====== Tokdash Data Server ======
 let tokdashProcess = null;
+let tokdashStarting = false;
 const TOKDASH_PORT = 55423;
-
 
 function ensureDataFile() {
   if (!fs.existsSync(DATA_FILE)) {
     fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
-    fs.writeFileSync(DATA_FILE, JSON.stringify({ notes: [], reminders: [], settings: { theme: 'system', appearance: 'bordered', panelAlpha: 82 } }), 'utf-8');
+    fs.writeFileSync(DATA_FILE, JSON.stringify({ notes: [], reminders: [], settings: { theme: 'system', mode: 'system', appearance: 'bordered', panelAlpha: 82 } }), 'utf-8');
   }
 }
 
@@ -26,20 +26,27 @@ function readData() {
   try {
     return JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
   } catch {
-    return { notes: [], reminders: [], settings: { theme: 'system', appearance: 'bordered', panelAlpha: 82 } };
+    return { notes: [], reminders: [], settings: { theme: 'system', mode: 'system', appearance: 'bordered', panelAlpha: 82 } };
   }
 }
 
 function writeData(data) {
-  if (!data.settings) data.settings = { theme: 'system', appearance: 'bordered', panelAlpha: 82 };
+  if (!data.settings) data.settings = { theme: 'system', mode: 'system', appearance: 'bordered', panelAlpha: 82 };
   if (data.settings.panelAlpha === undefined) data.settings.panelAlpha = 82;
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  if (data.settings.mode === undefined) data.settings.mode = 'system';
+  // Clean up completed reminders to prevent indefinite data growth
+  data.reminders = (data.reminders || []).filter(r => !r.done);
+  const tmpFile = DATA_FILE + '.tmp';
+  fs.writeFileSync(tmpFile, JSON.stringify(data, null, 2), 'utf-8');
+  fs.renameSync(tmpFile, DATA_FILE);
 }
 
 function getAccentColor() {
   try {
     if (process.platform === 'win32' && systemPreferences.getAccentColor) {
-      const hex = systemPreferences.getAccentColor();
+      let hex = systemPreferences.getAccentColor();
+      // Windows returns 8-char AARRGGBB hex; strip alpha prefix for valid CSS (#RRGGBB)
+      if (hex && hex.length >= 8) hex = hex.substring(2);
       return '#' + hex;
     }
   } catch {}
@@ -95,7 +102,7 @@ function getMdFileFromArgs(argv) {
 function openMdFile(filePath) {
   try {
     if (!filePath || !fs.existsSync(filePath)) {
-      console.warn('QuickMemo: file not found', filePath);
+      console.warn('[QuickMemo] file not found', filePath);
       return;
     }
     const content = fs.readFileSync(filePath, 'utf-8');
@@ -110,7 +117,7 @@ function openMdFile(filePath) {
       });
     }
   } catch (e) {
-    console.warn('QuickMemo: failed to open file', filePath, e.message);
+    console.warn('[QuickMemo] failed to open file', filePath, e.message);
   }
 }
 
@@ -121,10 +128,10 @@ function registerGlobalShortcut(accelerator) {
       toggleWindow();
     });
     if (!ok) {
-      console.warn('QuickMemo: failed to register shortcut', accelerator);
+      console.warn('[QuickMemo] failed to register shortcut', accelerator);
     }
   } catch (e) {
-    console.warn('QuickMemo: shortcut registration error', e.message);
+    console.warn('[QuickMemo] shortcut registration error', e.message);
   }
 }
 
@@ -353,7 +360,7 @@ if (!gotTheLock) {
       const filePath = getMdFileFromArgs(argv);
       if (filePath) openMdFile(filePath);
     } catch (e) {
-      console.error('QuickMemo: second-instance error:', e);
+      console.error('[QuickMemo] second-instance error:', e);
     }
   });
 
@@ -362,7 +369,7 @@ if (!gotTheLock) {
     try {
       openMdFile(filePath);
     } catch (e) {
-      console.error('QuickMemo: open-file error:', e);
+      console.error('[QuickMemo] open-file error:', e);
     }
   });
 
@@ -396,11 +403,11 @@ if (!gotTheLock) {
           const filePath = getMdFileFromArgs(process.argv);
           if (filePath) openMdFile(filePath);
         } catch (e) {
-          console.error('QuickMemo: did-finish-load file-open error:', e);
+          console.error('[QuickMemo] did-finish-load file-open error:', e);
         }
       });
     } catch (e) {
-      console.error('QuickMemo: failed to register did-finish-load:', e);
+      console.error('[QuickMemo] failed to register did-finish-load:', e);
     }
 
     app.on('activate', () => {
@@ -421,7 +428,7 @@ ipcMain.handle('get-theme-preference', () => getThemePreference());
 ipcMain.handle('load-data', () => readData());
 ipcMain.handle('save-data', (_, data) => {
   const existing = readData();
-  data.settings = existing.settings || { theme: 'system', appearance: 'bordered', panelAlpha: 82 };
+  data.settings = Object.assign({}, existing.settings || { theme: 'system', appearance: 'bordered', panelAlpha: 82 }, data.settings || {});
   writeData(data);
   scheduleReminders();
 });
@@ -466,7 +473,7 @@ ipcMain.handle('save-file', (_, { filePath, content }) => {
     fs.writeFileSync(filePath, content, 'utf-8');
     return true;
   } catch (e) {
-    console.warn('QuickMemo: failed to save file', filePath, e.message);
+    console.warn('[QuickMemo] failed to save file', filePath, e.message);
     return false;
   }
 });
@@ -511,66 +518,7 @@ ipcMain.handle('export-markdown-file', async (_, { filename, content }) => {
     return { ok: false, error: e.message };
   }
 });
-// ====== LLM API 调用 ======
-ipcMain.handle('call-llm', async (_, { base_url, model_name, api_key, prompt }) => {
-  try {
-    let url = base_url.trim().replace(/\/+$/, '');
-    if (!url.endsWith('/chat/completions')) {
-      if (!url.endsWith('/v1')) url += '/v1';
-      url += '/chat/completions';
-    }
-    const resp = await net.fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + api_key,
-      },
-      body: JSON.stringify({
-        model: model_name,
-        messages: [
-          { role: 'system', content: '你是一个标题生成助手。根据用户提供的备忘录内容，生成一个简洁、准确的中文标题（不超过20个字）。只输出标题本身，不要有任何解释或额外内容。' },
-          { role: 'user', content: prompt }
-        ],
-        temperature: 0.3,
-        max_tokens: 50,
-      }),
-    });
-    if (!resp.ok) {
-      const errText = await resp.text().catch(() => '');
-      return { ok: false, error: `HTTP ${resp.status}: ${errText.slice(0, 200)}` };
-    }
-    const data = await resp.json();
-    const title = data.choices?.[0]?.message?.content?.trim() || '';
-    return { ok: true, title };
-  } catch (e) {
-    return { ok: false, error: e.message };
-  }
-});
 
-// ====== API Key 安全存储 ======
-ipcMain.handle('encrypt-string', (_, plaintext) => {
-  try {
-    if (!safeStorage.isEncryptionAvailable()) {
-      return { ok: false, error: 'Encryption not available on this system' };
-    }
-    const encrypted = safeStorage.encryptString(plaintext);
-    return { ok: true, encrypted: encrypted.toString('hex') };
-  } catch (e) {
-    return { ok: false, error: e.message };
-  }
-});
-
-ipcMain.handle('decrypt-string', (_, hex) => {
-  try {
-    if (!safeStorage.isEncryptionAvailable()) {
-      return { ok: false, error: 'Encryption not available on this system' };
-    }
-    const decrypted = safeStorage.decryptString(Buffer.from(hex, 'hex'));
-    return { ok: true, plaintext: decrypted };
-  } catch (e) {
-    return { ok: false, error: e.message };
-  }
-});
 
 
 // ====== Note.ms 集成 ======
@@ -688,7 +636,7 @@ function startAIServer() {
   });
 
   aiServer.listen(AI_PIPE_NAME, () => {
-    console.log('QuickMemo AI server listening on', AI_PIPE_NAME);
+    console.log('[QuickMemo] AI server listening on', AI_PIPE_NAME);
   });
   aiServer.on('error', (e) => {
     if (e.code === 'EACCES') {
@@ -776,40 +724,53 @@ function handleAICommand(cmd, respond) {
 // Start AI server after app is ready
 function killTokdashPort() {
   try {
-    const { execSync } = require("child_process");
-    const out = execSync("netstat -ano | findstr \"127.0.0.1:" + TOKDASH_PORT + "\"", { encoding: "utf-8", timeout: 3000 });
-    out.split(/[\r\n]+/).forEach(line => {
-      const parts = line.trim().split(/\s+/);
-      if (parts.length > 4) {
-        try { process.kill(parseInt(parts[4])); } catch (e) {}
-      }
-    });
+    if (process.platform === 'win32') {
+      const { execSync } = require("child_process");
+      const out = execSync("netstat -ano | findstr \"127.0.0.1:" + TOKDASH_PORT + "\"", { encoding: "utf-8", timeout: 3000 });
+      out.split(/[\r\n]+/).forEach(line => {
+        const parts = line.trim().split(/\s+/);
+        if (parts.length > 4) {
+          try { process.kill(parseInt(parts[4])); } catch (e) {}
+        }
+      });
+    } else {
+      const { execSync } = require("child_process");
+      try {
+        const out = execSync("lsof -ti tcp:" + TOKDASH_PORT, { encoding: "utf-8", timeout: 3000 });
+        out.trim().split('\n').forEach(pid => {
+          if (pid) try { process.kill(parseInt(pid)); } catch (e) {}
+        });
+      } catch (e) {}
+    }
   } catch (e) {}
 }
 
 function startTokdash() {
-  if (tokdashProcess) return;
+  if (tokdashProcess || tokdashStarting) return;
+  tokdashStarting = true;
   const tm = path.join(__dirname, "tokdash", "cli.py");
-  if (!fs.existsSync(tm)) { console.warn("[QuickMemo] tokdash/cli.py not found in " + __dirname); return; }
+  if (!fs.existsSync(tm)) { console.warn("[QuickMemo] tokdash/cli.py not found in " + __dirname); tokdashStarting = false; return; }
   killTokdashPort();
   const cmds = process.platform === "win32" ? ["py", "python3", "python"] : ["python3", "python"];
   function ts(i) {
-    if (i >= cmds.length) { console.warn("[QuickMemo] No Python interpreter found for Tokdash"); return; }
+    if (i >= cmds.length) { console.warn("[QuickMemo] No Python interpreter found for Tokdash"); tokdashStarting = false; return; }
     try {
       const p = require("child_process").spawn(cmds[i], ["-m", "tokdash.cli", "--bind", "127.0.0.1", "--port", String(TOKDASH_PORT), "--no-open", "--log-level", "warning"], {
         cwd: __dirname,
-        env: Object.assign({}, process.env, { TOKDASH_NO_RETENTION_NOTICE: "1", PYTHONUNBUFFERED: "1" }),
+        env: Object.assign({}, process.env, { TOKDASH_NO_RETENTION_NOTICE: "1", PYTHONUNBUFFERED: "1", PYTHONIOENCODING: "utf-8" }),
         stdio: "pipe",
         windowsHide: true
       });
-      p.on("close", (code) => { tokdashProcess = null; if (code !== 0) console.error("[QuickMemo] Tokdash exited with code", code); });
-      p.on("error", (err) => { console.error("[QuickMemo] Tokdash spawn error:", err.message); if (i < cmds.length - 1) setTimeout(() => ts(i + 1), 1000); });
+      p.on("close", (code) => { tokdashProcess = null; tokdashStarting = false; if (code !== 0) console.error("[QuickMemo] Tokdash exited with code", code); });
+      p.on("error", (err) => { console.error("[QuickMemo] Tokdash spawn error:", err.message); tokdashProcess = null; if (i < cmds.length - 1) { tokdashStarting = true; setTimeout(() => ts(i + 1), 1000); } else { tokdashStarting = false; } });
       p.stderr.on("data", (d) => { console.error("[QuickMemo] Tokdash stderr:", d.toString().trim()); });
       p.stdout.on("data", (d) => { console.log("[QuickMemo] Tokdash stdout:", d.toString().trim()); });
       tokdashProcess = p;
+      tokdashStarting = false;
       console.log("[QuickMemo] Tokdash started with", cmds[i]);
     } catch (e) {
       if (i < cmds.length - 1) setTimeout(() => ts(i + 1), 1000);
+      else tokdashStarting = false;
     }
   }
   ts(0);
@@ -849,15 +810,15 @@ app.whenReady().then(() => {
     });
   });
 
+  // Auto-start Tokdash on app launch
+  setTimeout(() => { try { startTokdash(); } catch (e) {} }, 1500);
+
   try {
     startAIServer();
   } catch (e) {
-    console.warn('QuickMemo AI server failed to start:', e.message);
+    console.warn('[QuickMemo] AI server failed to start:', e.message);
   }
 });
-
-
-
 
 
 

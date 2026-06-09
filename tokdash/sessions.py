@@ -536,6 +536,7 @@ def _load_opencode_sessions(path_str: str, _mtime_ns: int, _size: int) -> Dict[s
                 )
             )
     finally:
+        cur.close()
         conn.close()
 
     return sessions

@@ -42,10 +42,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setNotemsContent: (key, content) => ipcRenderer.invoke('notems-put', { key, content }),
   exportMarkdownFile: (filename, content) => ipcRenderer.invoke('export-markdown-file', { filename, content }),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
-  callLLM: (params) => ipcRenderer.invoke('call-llm', params),
-  encryptString: (plaintext) => ipcRenderer.invoke('encrypt-string', plaintext),
-  decryptString: (hex) => ipcRenderer.invoke('decrypt-string', hex),
   startTokdashServer: () => ipcRenderer.invoke("start-tokdash-server"),
   tokdashFetch: (endpoint) => ipcRenderer.invoke("tokdash-fetch", endpoint)
 });
-
