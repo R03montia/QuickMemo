@@ -992,7 +992,7 @@ body {
   flex: 1;
   min-height: 0;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .drag-region {
@@ -2517,7 +2517,7 @@ body.resizing * { cursor: col-resize !important; user-select: none !important; }
 
 
 /* ====== 使用统计页面 ====== */
-.usage-section { position: absolute; inset: 0; overflow-y: auto; padding: 24px 28px; background: var(--main-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); z-index: 50; }
+.usage-section { padding: 24px 28px; background: var(--main-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); }
 .usage-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
 .usage-header h2 { margin: 0; font-size: 18px; font-weight: 600; color: var(--text); }
 .usage-period-select { display: flex; gap: 4px; background: var(--bg); border-radius: var(--r); padding: 3px; border: 1px solid var(--border); }
@@ -2595,6 +2595,7 @@ body.resizing * { cursor: col-resize !important; user-select: none !important; }
 .credit-item a { color: var(--accent); text-decoration: none; }
 .credit-item a:hover { text-decoration: underline; }
 .about-tech p { font-size: 12px !important; color: var(--text-muted) !important; font-family: var(--font-mono); }
+
 
 
 

@@ -61,12 +61,6 @@ start.ps1
 *.7z
 
 
-
-# ===== 临时调试文件 =====
-_clean_main.js
-_fix_*.js
-tokdash-main.py
-
 # ===== Python =====
 __pycache__/
 *.pyc

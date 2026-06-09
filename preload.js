@@ -45,4 +45,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   callLLM: (params) => ipcRenderer.invoke('call-llm', params),
   encryptString: (plaintext) => ipcRenderer.invoke('encrypt-string', plaintext),
   decryptString: (hex) => ipcRenderer.invoke('decrypt-string', hex),
+  startTokdashServer: () => ipcRenderer.invoke("start-tokdash-server"),
+  tokdashFetch: (endpoint) => ipcRenderer.invoke("tokdash-fetch", endpoint)
 });
+

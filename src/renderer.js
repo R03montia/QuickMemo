@@ -121,6 +121,7 @@ async function init() {
   setupTimeWheel();
   setupFileOpen();
   setupSidebarResizer();
+  setupUsage();
 
   // 标记初始化完成，处理等待中的文件打开
   initComplete = true;
@@ -751,6 +752,7 @@ function setupMultiToolbar() {
 }
 
 function selectNote(id) {
+  hideUsage();
   if (state.multiMode) exitMultiSelect();
   state.selectedId = id;
   state.multiSelected.clear();
@@ -1408,6 +1410,7 @@ function setupSettings() {
   const settingsSection = document.getElementById('settings-section');
 
   function openSettings() {
+    hideUsage();
     settingsOpen = true;
     // 侧栏切换
     sidebarHeader.style.display = 'none';
@@ -1552,6 +1555,8 @@ function setupSettings() {
   }
 
   // ⚙ 切换设置
+  document.getElementById('btn-usage')?.addEventListener('click', showUsage);
+
   document.getElementById('btn-settings')?.addEventListener('click', () => {
     if (settingsOpen) closeSettings();
     else openSettings();
@@ -2111,4 +2116,222 @@ function setupSidebarResizer() {
 
 
 
+// ====== Usage Stats (Tokdash) ======
+let _usageServerRunning = false;
+let _usageData = null;
+let _usagePeriod = "today";
+const _periodLabels = { today:"今日", "7d":"近7日", "30d":"近30日", month:"本月" };
+
+function showUsage() {
+  var u = document.getElementById("usage-section");
+  var e = document.getElementById("empty-state");
+  var ed = document.getElementById("note-editor");
+  var s = document.getElementById("settings-section");
+  if (e) e.style.display = "none";
+  if (ed) ed.style.display = "none";
+  if (s) s.style.display = "none";
+  if (u) { u.style.display = "block"; setMainView("usage"); renderUsage(); }
+}
+
+function hideUsage() {
+  var u = document.getElementById("usage-section");
+  if (u) u.style.display = "none";
+}
+
+function fmtTok(v) {
+  if (v == null) return "—";
+  if (v >= 1e6) return (v / 1e6).toFixed(1) + "M";
+  if (v >= 1e3) return (v / 1e3).toFixed(1) + "K";
+  return Math.round(v).toLocaleString();
+}
+
+function fmtCost(v) {
+  if (v == null) return "—";
+  if (v < 0.01) return "$" + v.toFixed(4);
+  return "$" + v.toFixed(2);
+}
+
+function fmtPct(v) {
+  if (v == null) return "—";
+  return (v * 100).toFixed(1) + "%";
+}
+
+function renderUsage() {
+  var c = document.getElementById("usage-section");
+  if (!c) return;
+
+  if (!_usageServerRunning) {
+    c.innerHTML =
+      '<div class="usage-server-notice">' +
+      '<div class="notice-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg></div>' +
+      '<div class="notice-title">数据服务未启动</div>' +
+      '<div class="notice-desc">需要启动 Tokdash 数据服务来读取 AI 工具的使用统计。数据来自 Claude Code / Codex 的本地日志。</div>' +
+      '<button class="btn btn-primary" id="btn-start-tokdash-server">启动数据服务</button>' +
+      '</div>';
+    return;
+  }
+
+  c.innerHTML = '<div class="usage-loading"><div class="usage-spinner"></div><div class="usage-loading-text">加载中…</div></div>';
+
+  Promise.all([
+    window.electronAPI.tokdashFetch("/api/usage?period=" + _usagePeriod),
+    window.electronAPI.tokdashFetch("/api/stats"),
+  ])
+  .then(function(results) {
+    var d = results[0], st = results[1];
+    if (!d || d.error) {
+      _usageServerRunning = false;
+      renderUsage();
+      return;
+    }
+    var t = d.total_tokens || 0;
+    var cost = d.total_cost || 0;
+    var msgs = d.total_messages || 0;
+    var comp = d.comparison || {};
+    var models = d.top_models || d.coding_models || d.combined_models || [];
+    var days = st.contributions || [];
+
+    function chg(v, prev) {
+      if (prev == null || prev === 0) return '<div class="usage-kpi-change neutral">—</div>';
+      var p = ((v - prev) / prev * 100).toFixed(1);
+      var dir = p >= 0 ? "up" : "down";
+      var sym = p >= 0 ? "↑" : "↓";
+      if (Math.abs(p) > 999) return '<div class="usage-kpi-change ' + dir + '">' + sym + " 999+%</div>";
+      return '<div class="usage-kpi-change ' + dir + '">' + sym + " " + Math.abs(p) + "%</div>";
+    }
+
+    function periodBtn(p) {
+      return '<button class="usage-period-btn' +
+        (_usagePeriod === p ? " active" : "") +
+        '" data-period="' + p + '">' +
+        (_periodLabels[p] || p) + "</button>";
+    }
+
+    var btns = ["today","7d","30d","month"].map(periodBtn).join("");
+
+    var mh = "";
+    if (!models || models.length === 0) {
+      mh = '<div class="usage-empty"><p>暂无模型数据</p></div>';
+    } else {
+      var maxCost = Math.max.apply(null, models.map(function(m) { return m.cost || 0; }));
+      mh = models.map(function(m) {
+        var pw = maxCost > 0 ? (m.cost / maxCost * 100) : 0;
+        return '<div class="usage-model-row">' +
+          '<span class="usage-model-name">' + m.name + "</span>" +
+          '<div class="usage-model-bar"><div class="usage-model-bar-fill" style="width:' + pw + '%"></div></div>' +
+          '<span class="usage-model-pct">' +
+          (d.total_cost > 0 ? (m.cost / d.total_cost * 100).toFixed(1) : "0") + "%</span>" +
+          '<span class="usage-model-cost">' + fmtCost(m.cost) + "</span>" +
+          "</div>";
+      }).join("");
+    }
+
+    var pct = d.cache_hit_rate || 0;
+
+    var gh = "";
+    if (days && days.length > 0) {
+      var dayLabels = ["一","二","三","四","五","六","日"];
+      gh += '<div class="usage-grid-header">';
+      dayLabels.forEach(function(l) { gh += '<span class="usage-grid-day-label">' + l + "</span>"; });
+      gh += "</div>";
+
+      var weeks = [];
+      var wk = [];
+      var firstDay = new Date(days[0].date);
+      var fdow = firstDay.getDay() || 7;
+      for (var wi = 1; wi < fdow; wi++) wk.push(null);
+      days.forEach(function(e) {
+        var cellDate = new Date(e.date);
+        var tk2 = (e.totals && e.totals.tokens) || e.total_tokens || 0;
+        if (wk.length === 7) { weeks.push(wk); wk = []; }
+        var lv = (e.intensity > 0 && e.intensity <= 4) ? ["empty","lv1","lv2","lv3","lv4"][e.intensity] : tk2 === 0 ? "empty" : tk2 > 100000 ? "lv4" : tk2 > 50000 ? "lv3" : tk2 > 10000 ? "lv2" : "lv1";
+        wk.push({ date: e.date, tokens: tk2, level: lv, day: cellDate.getDate() });
+      });
+      while (wk.length > 0 && wk.length < 7) wk.push(null);
+      if (wk.length > 0) weeks.push(wk);
+
+      weeks.forEach(function(w) {
+        gh += '<div class="usage-grid-row">';
+        w.forEach(function(cell) {
+          if (!cell) { gh += '<div class="usage-grid-cell empty"></div>'; return; }
+          gh += '<div class="usage-grid-cell ' + cell.level + '">';
+          gh += '<div class="usage-grid-tooltip">' + cell.date + ": " + fmtTok(cell.tokens) + " tok</div>";
+          gh += '<span class="usage-grid-date">' + cell.day + "</span></div>";
+        });
+        gh += "</div>";
+      });
+
+      gh += '<div class="usage-grid-labels">';
+      gh += '<span>少</span>';
+      gh += '<div class="usage-grid-legend">';
+      ["empty","lv1","lv2","lv3","lv4"].forEach(function(l) {
+        gh += '<div class="legend-cell ' + l + '"></div>';
+      });
+      gh += "</div>";
+      gh += "<span>多</span></div>";
+    }
+
+    c.innerHTML =
+      '<div class="usage-header">' +
+      '<h2>使用统计</h2>' +
+      '<div class="usage-period-select">' + btns + "</div>" +
+      "</div>" +
+      '<div class="usage-kpis">' +
+      '<div class="usage-kpi-card">' +
+      '<div class="usage-kpi-label">Token</div>' +
+      '<div class="usage-kpi-value">' + fmtTok(t) + "</div>" + chg(t, comp.tokens_prev) +
+      "</div>" +
+      '<div class="usage-kpi-card">' +
+      '<div class="usage-kpi-label">花费</div>' +
+      '<div class="usage-kpi-value">' + fmtCost(cost) + "</div>" + chg(cost, comp.cost_prev) +
+      "</div>" +
+      '<div class="usage-kpi-card">' +
+      '<div class="usage-kpi-label">消息</div>' +
+      '<div class="usage-kpi-value">' + msgs.toLocaleString() + "</div>" + chg(msgs, comp.messages_prev) +
+      "</div>" +
+      '<div class="usage-kpi-card">' +
+      '<div class="usage-kpi-label">缓存命中</div>' +
+      '<div class="usage-kpi-value">' + fmtPct(pct) + "</div>" +
+      '<div class="usage-kpi-sub">' + (Object.keys(d.by_tool || {}).length) + " 个来源</div>" +
+      "</div>" +
+      "</div>" +
+      '<div class="usage-section-card"><h3>使用日历</h3><div class="usage-grid">' + gh + "</div></div>" +
+      '<div class="usage-section-card"><h3>模型消耗排行</h3>' + mh + "</div>";
+  })
+  .catch(function() { _usageServerRunning = false; renderUsage(); });
+}
+
+function setupUsage() {
+  document.getElementById("usage-section").addEventListener("click", function(e) {
+    var pb = e.target.closest(".usage-period-btn");
+    if (pb) { _usagePeriod = pb.dataset.period; renderUsage(); return; }
+    var sb = e.target.closest("#btn-start-tokdash-server");
+    if (sb) {
+      sb.disabled = true;
+      sb.textContent = "启动中…";
+      window.electronAPI.startTokdashServer().then(function(result) {
+        if (result && result.ok) {
+          _usageServerRunning = true;
+          renderUsage();
+        } else {
+          document.getElementById("usage-section").innerHTML =
+            '<div class="usage-server-notice"><div class="notice-title">启动失败</div>' +
+            '<div class="notice-desc">' + (result && result.error ? result.error : "服务启动超时，请检查 Python / uvicorn 是否安装") + '</div>' +
+            '<button class="btn btn-primary" id="btn-start-tokdash-server">重试</button></div>';
+        }
+      })
+      .catch(function(err) {
+        document.getElementById("usage-section").innerHTML =
+          '<div class="usage-server-notice"><div class="notice-title">启动失败</div>' +
+          '<div class="notice-desc">' + (err && err.message ? err.message : "IPC调用失败") + '</div>' +
+          '<button class="btn btn-primary" id="btn-start-tokdash-server">重试</button></div>';
+      });
+    }
+  });
+}
+
 init();
+
+
+
+
