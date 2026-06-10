@@ -18,7 +18,6 @@ const SVG = {
 let state = { notes: [], reminders: [], selectedId: null, multiSelected: new Set(), multiMode: false };
 let saveTimer = null;
 let settings = { markdownEnabled: true, notemsMarkdownEnabled: false, theme: 'system', appearance: 'bordered', panelAlpha: 82, customCSS: '' };
-let aiSettings = { base_url: '', api_key: '', model_name: '', autoTitle: false };
 
 function isMarkdownEnabledForNote(note) {
   if (note.markdownEnabled !== undefined) return note.markdownEnabled;
@@ -1315,10 +1314,6 @@ function scheduleSave() {
     }
 
 
-    // 保存完成后触发 AI 标题生成
-    if (aiSettings.autoTitle && snapshotNote && snapshotNote.body && snapshotNote.body.trim().length >= 10) {
-      generateAITitle(snapshotId);
-    }
   }, 500);
 }
 
@@ -1750,123 +1745,6 @@ function setupSettings() {
   if (settings.customCSS) {
     setTimeout(() => applyCustomCSS(settings.customCSS), 100);
   }
-  // ====== AI 总结设置 ======
-  const aiBaseUrl = document.getElementById('ai-base-url');
-  const aiApiKey = document.getElementById('ai-api-key');
-  const aiModelName = document.getElementById('ai-model-name');
-  const aiAutoTitle = document.getElementById('ai-auto-title');
-  const aiStatus = document.getElementById('ai-status');
-  const btnSaveAi = document.getElementById('btn-save-ai-settings');
-  const btnTestLlm = document.getElementById('btn-test-llm');
-
-  function updateAiButtonVisibility() { return; 
-    const btn = document.getElementById('btn-ai-title');
-    if (btn) {
-      btn.style.display = (aiSettings.base_url && aiSettings.api_key && aiSettings.model_name) ? '' : 'none';
-    }
-  }
-
-  async function loadAiSettings() { return; 
-    if (settings.aiSettings) {
-      aiSettings.base_url = settings.aiSettings.base_url || '';
-      aiSettings.model_name = settings.aiSettings.model_name || '';
-      aiSettings.autoTitle = settings.aiSettings.autoTitle !== false;
-      if (settings.aiSettings.encrypted_key) {
-        const result = await window.electronAPI.decryptString(settings.aiSettings.encrypted_key);
-        if (result.ok) {
-          aiSettings.api_key = result.plaintext;
-        }
-      }
-    }
-    if (aiBaseUrl) aiBaseUrl.value = aiSettings.base_url || '';
-    if (aiApiKey) aiApiKey.value = aiSettings.api_key || '';
-    if (aiModelName) aiModelName.value = aiSettings.model_name || '';
-    if (aiAutoTitle) aiAutoTitle.checked = aiSettings.autoTitle !== false;
-  }
-
-  async function saveAiSettings() { return; 
-    if (aiBaseUrl) aiSettings.base_url = aiBaseUrl.value.trim();
-    if (aiApiKey) aiSettings.api_key = aiApiKey.value.trim();
-    if (aiModelName) aiSettings.model_name = aiModelName.value.trim();
-    if (aiAutoTitle) aiSettings.autoTitle = aiAutoTitle.checked;
-    // 加密存储 API Key
-    if (aiSettings.api_key) {
-      const result = await window.electronAPI.encryptString(aiSettings.api_key);
-      if (result.ok) {
-        settings.aiSettings = {
-          base_url: aiSettings.base_url,
-          encrypted_key: result.encrypted,
-          model_name: aiSettings.model_name,
-          autoTitle: aiSettings.autoTitle
-        };
-      } else {
-        // 加密不可用，回退明文存储（显示警告）
-        settings.aiSettings = {
-          base_url: aiSettings.base_url,
-          api_key: aiSettings.api_key,
-          model_name: aiSettings.model_name,
-          autoTitle: aiSettings.autoTitle
-        };
-        if (aiStatus) aiStatus.textContent = '⚠ 系统加密不可用，API Key 将以明文存储';
-        if (aiStatus) aiStatus.className = 'ai-status ai-status-err';
-      }
-    } else {
-      settings.aiSettings = {
-        base_url: aiSettings.base_url,
-        model_name: aiSettings.model_name,
-        autoTitle: aiSettings.autoTitle
-      };
-    }
-    scheduleSave();
-    if (aiStatus) aiStatus.textContent = 'AI 设置已保存（API Key 已加密）';
-    if (aiStatus) aiStatus.className = 'ai-status ai-status-ok';
-    updateAiButtonVisibility();
-  }
-
-  if (btnSaveAi) {
-    btnSaveAi.addEventListener('click', saveAiSettings);
-  }
-
-  if (btnTestLlm) {
-    btnTestLlm.addEventListener('click', async () => {
-      const url = aiBaseUrl ? aiBaseUrl.value.trim() : '';
-      const key = aiApiKey ? aiApiKey.value.trim() : '';
-      const model = aiModelName ? aiModelName.value.trim() : '';
-      if (!url || !key || !model) {
-        if (aiStatus) aiStatus.textContent = '✗ 请先填写 API 地址、Key 和模型名称';
-        if (aiStatus) aiStatus.className = 'ai-status ai-status-err';
-        return;
-      }
-      if (aiStatus) aiStatus.textContent = '测试中…';
-      if (aiStatus) aiStatus.className = 'ai-status';
-      const result = await window.electronAPI.callLLM({
-        base_url: url,
-        model_name: model,
-        api_key: key,
-        prompt: '你好'
-      });
-      if (result.ok) {
-        if (aiStatus) aiStatus.textContent = '✓ 连接成功！返回：' + result.title;
-        if (aiStatus) aiStatus.className = 'ai-status ai-status-ok';
-      } else {
-        if (aiStatus) aiStatus.textContent = '✗ 连接失败：' + (result.error || '未知错误');
-        if (aiStatus) aiStatus.className = 'ai-status ai-status-err';
-      }
-    });
-  }
-
-  // AI 生成标题按钮（编辑器工具栏）
-  const btnAiTitle = document.getElementById('btn-ai-title');
-  if (btnAiTitle) {
-    updateAiButtonVisibility();
-    btnAiTitle.addEventListener('click', () => {
-      if (state.selectedId) generateAITitle(state.selectedId);
-    });
-  }
-
-  // 恢复已保存的 AI 设置
-  loadAiSettings();
-  updateAiButtonVisibility();
 
 }
 // ====== Toast 通知 =====
@@ -1885,68 +1763,6 @@ function showToast(message, type) {
     toast.classList.add('toast-hiding');
     setTimeout(() => toast.remove(), 300);
   }, 4000);
-}
-
-// ====== AI 标题生成 =====
-async function generateAITitle(noteId) { return; 
-  const note = state.notes.find(n => n.id === noteId);
-  if (!note || !note.body || !note.body.trim()) {
-    showToast('笔记内容为空，无法生成标题', 'err');
-    return;
-  }
-  
-  const cfg = aiSettings;
-  if (!cfg.base_url || !cfg.api_key || !cfg.model_name) {
-    showToast('请先在设置中配置 AI 参数', 'err');
-    return;
-  }
-  
-  const body = note.body.trim();
-  if (body.length < 10) {
-    showToast('内容太短，无法生成标题', 'err');
-    return;
-  }
-  
-  let prompt = body;
-  if (body.length > 2000) prompt = body.slice(0, 2000);
-  
-  // 加载动画
-  const btnAiTitle = document.getElementById('btn-ai-title');
-  if (btnAiTitle) btnAiTitle.classList.add('loading');
-  
-  const status = document.getElementById('note-status');
-  if (status) status.textContent = 'AI 生成标题…';
-  
-  showToast('AI 正在生成标题…', 'info');
-  
-  const result = await window.electronAPI.callLLM({
-    base_url: cfg.base_url,
-    model_name: cfg.model_name,
-    api_key: cfg.api_key,
-    prompt: prompt
-  });
-  
-  // 移除加载动画
-  if (btnAiTitle) btnAiTitle.classList.remove('loading');
-  
-  if (result.ok && result.title) {
-    const title = result.title.replace(/^["'「『]|["'」』]$/g, '').trim();
-    if (title) {
-      note.title = title;
-      note._autoTitled = true;
-      // 同步 UI
-      note._autoTitled = false; // AI 生成的标题，停止第一行同步
-      if (titleInput) titleInput.value = title;
-      updateSidebarItem(noteId, title);
-      if (status) status.textContent = '标题已生成';
-      showToast('AI 标题已生成：' + title, 'ok');
-    } else {
-      showToast('AI 返回的标题无效', 'err');
-    }
-  } else {
-    if (status) status.textContent = '标题生成失败';
-    showToast('标题生成失败：' + (result.error || '未知错误'), 'err');
-  }
 }
 
 function showToastMessage(text) {
