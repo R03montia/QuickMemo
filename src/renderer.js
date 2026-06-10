@@ -1259,8 +1259,8 @@ function setupTimeWheel() {
       if (rafId !== null) return;
       rafId = requestAnimationFrame(() => {
         rafId = null;
-        // 一次 raf 内累积的滚动量：每 50px 跳一格
-        const steps = Math.sign(pendingDelta) * Math.min(3, Math.max(1, Math.abs(pendingDelta) / 50 | 0));
+        // 一次 raf 内累积的滚动量：每 100px 跳一格
+        const steps = Math.sign(pendingDelta) * Math.min(3, Math.max(1, Math.abs(pendingDelta) / 100 | 0));
         const current = col.getter();
         const next = ((current + steps * col.step) % col.max + col.max) % col.max;
         col.setter(next);
