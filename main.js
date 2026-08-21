@@ -69,18 +69,24 @@ function scheduleReminders() {
     const delay = t - now;
     if (delay > 0) {
       const timer = setTimeout(() => {
-        const note = data.notes.find(n => n.id === reminder.noteId);
+        // H1 修复：触发时重新读取最新数据，只把本条提醒标记为 done。
+        // 原实现用调度时的过期快照整体覆盖 notes.json，会把等待期间
+        // 用户的所有编辑回滚丢失；多个提醒先后触发还会互相踩踏。
+        const fresh = readData();
+        const rem = fresh.reminders.find(r => r.id === reminder.id);
+        if (!rem || rem.done) return; // 已被用户取消或处理
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.show();
           mainWindow.focus();
         }
+        const note = fresh.notes.find(n => n.id === rem.noteId);
         new Notification({
           title: 'QuickMemo 提醒',
           body: note ? note.title : '你有新的提醒事项',
           silent: false,
         }).show();
-        reminder.done = true;
-        writeData(data);
+        rem.done = true;
+        writeData(fresh);
       }, delay);
       reminderTimers.set(reminder.id, timer);
     }
@@ -476,6 +482,12 @@ ipcMain.handle('open-external', async (_, url) => {
 });
 ipcMain.handle('save-file', (_, { filePath, content }) => {
   try {
+    // M1 修复：save-file 只允许「覆盖已存在的 .md/.markdown/.txt 笔记文件」，
+    // 不再是无约束的任意路径写入（与 export-markdown-file 的消毒标准对齐）
+    if (typeof filePath !== 'string' || !filePath) return false;
+    const ext = path.extname(filePath).toLowerCase();
+    if (!['.md', '.markdown', '.txt'].includes(ext)) return false;
+    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return false;
     fs.writeFileSync(filePath, content, 'utf-8');
     return true;
   } catch (e) {
@@ -484,9 +496,38 @@ ipcMain.handle('save-file', (_, { filePath, content }) => {
   }
 });
 ipcMain.handle('get-shortcut', () => getShortcut());
+// L6 修复：校验 accelerator 格式，拒绝畸形组合
+const ACCEL_MODIFIERS = new Set([
+  'commandorcontrol', 'cmdorctrl', 'command', 'cmd', 'control', 'ctrl',
+  'alt', 'option', 'opts', 'shift', 'super', 'hyper', 'meta',
+]);
+const ACCEL_NAMED_KEYS = new Set([
+  'space', 'tab', 'enter', 'return', 'esc', 'escape', 'backspace', 'delete',
+  'insert', 'up', 'down', 'left', 'right', 'home', 'end', 'pageup', 'pagedown',
+  'plus', 'minus', 'num0', 'num1', 'num2', 'num3', 'num4', 'num5', 'num6',
+  'num7', 'num8', 'num9', 'numdec', 'numadd', 'numsub', 'nummult', 'numdiv',
+]);
+
+function isValidAccelerator(acc) {
+  if (typeof acc !== 'string') return false;
+  const parts = acc.split('+');
+  if (parts.length < 2 || parts.length > 5) return false;
+  const key = parts[parts.length - 1];
+  if (!key || ACCEL_MODIFIERS.has(key.toLowerCase())) return false; // 最后一段必须是键
+  for (const p of parts.slice(0, -1)) {
+    if (!ACCEL_MODIFIERS.has(p.toLowerCase())) return false;
+  }
+  if (/^[a-z0-9]$/i.test(key)) return true;                // 单个字母/数字
+  if (/^f([1-9]|1[0-9]|2[0-4])$/i.test(key)) return true;  // F1-F24
+  return ACCEL_NAMED_KEYS.has(key.toLowerCase());           // 命名键
+}
+
 ipcMain.handle('set-shortcut', (_, accelerator) => {
-  try { setShortcut(accelerator); return true; }
-  catch (e) { return false; }
+  try {
+    if (!isValidAccelerator(accelerator)) return false;
+    setShortcut(accelerator);
+    return true;
+  } catch (e) { return false; }
 });
 ipcMain.handle('get-window-bounds', () => {
   if (!mainWindow || mainWindow.isDestroyed()) return null;
@@ -550,7 +591,7 @@ ipcMain.handle('notems-get', async (_, key) => {
     ];
     for (const p of patterns) {
       const m = html.match(p);
-      if (m && m[1].trim().length > 0) return m[1].trim();
+      if (m && m[1].trim().length > 0) return decodeHtmlEntities(m[1].trim());
     }
     // 没匹配到内容，返回 HTML 前 300 字符辅助排查
     return '__DEBUG__:' + html.substring(0, 300);
@@ -631,7 +672,7 @@ ipcMain.handle('getnote-get', async (_, key) => {
     ];
     for (const p of patterns) {
       const m = html.match(p);
-      if (m && m[1].trim().length > 0) return m[1].trim();
+      if (m && m[1].trim().length > 0) return decodeHtmlEntities(m[1].trim());
     }
     return '__DEBUG__:' + html.substring(0, 300);
   } catch (e) {
@@ -716,10 +757,24 @@ function startAIServer() {
     console.log('[QuickMemo] AI server listening on', AI_PIPE_NAME);
   });
   aiServer.on('error', (e) => {
-    if (e.code === 'EACCES') {
-      console.warn('QuickMemo AI pipe access denied, retrying with elevated permissions');
-    }
+    // M2 修复：修正误导性日志（原文案暗示会自动提权重试，实际并没有）
+    console.warn('[QuickMemo] AI pipe server error:', e.code, e.message);
   });
+}
+
+// L2 修复：从远端 HTML 抓取的文本需要解码实体（&lt; &amp; &#x..; 等），
+// 否则正文里会残留字面量实体
+function decodeHtmlEntities(s) {
+  return String(s)
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)))
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/gi, '&'); // &amp; 必须最后替换
 }
 
 function handleAICommand(cmd, respond) {
@@ -799,6 +854,20 @@ function handleAICommand(cmd, respond) {
 }
 
 // Start AI server after app is ready
+// H2 修复：按端口找到 PID 后，先校验其命令行确实属于 tokdash 再杀，
+// 避免误杀恰好占用同一端口的无关应用。
+function pidLooksLikeTokdash(pid) {
+  try {
+    const { execSync } = require("child_process");
+    if (process.platform === "win32") {
+      const out = execSync("wmic process where processid=" + pid + " get commandline", { encoding: "utf-8", timeout: 3000 });
+      return /tokdash/i.test(out);
+    }
+    const cmd = execSync("ps -p " + pid + " -o command=", { encoding: "utf-8", timeout: 3000 });
+    return /tokdash/i.test(cmd);
+  } catch (e) { return false; }
+}
+
 function killTokdashPort() {
   try {
     if (process.platform === 'win32') {
@@ -807,15 +876,25 @@ function killTokdashPort() {
       out.split(/[\r\n]+/).forEach(line => {
         const parts = line.trim().split(/\s+/);
         if (parts.length > 4) {
-          try { process.kill(parseInt(parts[4])); } catch (e) {}
+          const pid = parseInt(parts[4]);
+          if (pid && pid !== process.pid && pidLooksLikeTokdash(pid)) {
+            try { process.kill(pid); } catch (e) {}
+          } else if (pid) {
+            console.warn("[QuickMemo] 端口 " + TOKDASH_PORT + " 被非 tokdash 进程占用（pid " + pid + "），跳过清理");
+          }
         }
       });
     } else {
       const { execSync } = require("child_process");
       try {
         const out = execSync("lsof -ti tcp:" + TOKDASH_PORT, { encoding: "utf-8", timeout: 3000 });
-        out.trim().split('\n').forEach(pid => {
-          if (pid) try { process.kill(parseInt(pid)); } catch (e) {}
+        out.trim().split('\n').forEach(pidStr => {
+          const pid = parseInt(pidStr);
+          if (pid && pid !== process.pid && pidLooksLikeTokdash(pid)) {
+            try { process.kill(pid); } catch (e) {}
+          } else if (pid) {
+            console.warn("[QuickMemo] 端口 " + TOKDASH_PORT + " 被非 tokdash 进程占用（pid " + pid + "），跳过清理");
+          }
         });
       } catch (e) {}
     }
@@ -917,10 +996,14 @@ app.whenReady().then(() => {
   // Auto-start Tokdash on app launch
   setTimeout(() => { try { startTokdash(); } catch (e) {} }, 1500);
 
-  try {
-    startAIServer();
-  } catch (e) {
-    console.warn('[QuickMemo] AI server failed to start:', e.message);
+  // M2 修复：named pipe（\\.\pipe\...）仅 Windows 有意义；
+  // 非 Windows 平台 listen 该路径会被当作 Unix socket 在 cwd 创建垃圾文件
+  if (process.platform === 'win32') {
+    try {
+      startAIServer();
+    } catch (e) {
+      console.warn('[QuickMemo] AI server failed to start:', e.message);
+    }
   }
 });
 

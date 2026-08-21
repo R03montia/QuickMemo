@@ -9,7 +9,6 @@
     "postinstall": "node scripts/install-tokdash-deps.js"
   },
   "dependencies": {
-    "electron": "^33.0.0",
-    "marked": "^18.0.4"
+    "electron": "^33.0.0"
   }
 }

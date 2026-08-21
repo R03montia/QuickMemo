@@ -110,7 +110,9 @@ app.add_middleware(NoCacheMiddleware)
 cors_allow_origins = [o.strip() for o in os.environ.get("TOKDASH_ALLOW_ORIGINS", "").split(",") if o.strip()]
 cors_allow_origin_regex = os.environ.get("TOKDASH_ALLOW_ORIGIN_REGEX", "").strip() or None
 if not cors_allow_origins and cors_allow_origin_regex is None:
-    cors_allow_origin_regex = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+    # M3 修复：默认只放行 tokdash 自己的两个已知端口（QuickMemo 内嵌 17523 /
+    # 独立运行默认 55423），不再放行本机任意端口的 Web 应用跨域读取 API。
+    cors_allow_origin_regex = r"^https?://(localhost|127\.0\.0\.1):(17523|55423)$"
 
 app.add_middleware(
     CORSMiddleware,

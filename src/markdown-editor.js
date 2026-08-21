@@ -22,13 +22,30 @@ const MarkdownEditor = (() => {
     const m = getMarked();
     if (m) {
       try {
-        const safe = escapeHtmlEntities(text || '');
+        const safe = escapeOutsideCode(text || '');
         return m.parse(safe, { breaks: true, gfm: true });
       } catch {
         return escapePreview(text || '');
       }
     }
     return escapePreview(text || '');
+  }
+
+  // L3 修复：只对代码段（``` / ~~~ 围栏、` 行内）之外的文本做 HTML 实体转义。
+  // 原先整篇转义会让代码块里的 & 等字符被双重转义显示；代码段原样保留，
+  // 由 marked 自行转义输出。代码段之外 raw HTML 仍被实体化，XSS 防线不变。
+  // （4 空格缩进代码块仍会被转义，属已知取舍）
+  function escapeOutsideCode(text) {
+    const parts = [];
+    const re = /(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`)/g;
+    let last = 0, m;
+    while ((m = re.exec(text)) !== null) {
+      parts.push(escapeHtmlEntities(text.slice(last, m.index)));
+      parts.push(m[0]);
+      last = m.index + m[0].length;
+    }
+    parts.push(escapeHtmlEntities(text.slice(last)));
+    return parts.join('');
   }
 
   function escapePreview(text) {

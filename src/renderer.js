@@ -769,6 +769,9 @@ function setMainView(view) {
 }
 
 // ====== 编辑器 ======
+// L1 修复：记录每条笔记上次成功导出的正文，避免 Ctrl+S 重复写盘（不持久化）
+const lastExportedBodies = new Map();
+
 function renderEditor(id) {
   const note = state.notes.find(n => n.id === id);
   const editor = document.getElementById('note-editor');
@@ -972,10 +975,15 @@ function setupEditor() {
     window.electronAPI.saveData({ notes: state.notes, reminders: state.reminders.filter(r => !r.done) }).then(() => {
       if (status) status.textContent = '已保存';
       // 同时导出当前笔记为 .md 到用户个人文件夹
-      if (note) {
-        const exportName = note.title || '未命名';
+      if (note && lastExportedBodies.get(note.id) !== note.body) {
+        // L1 修复：同名标题导出会互相覆盖 → 重名时追加 id 后缀；
+        // 内容未变化时跳过重复写盘（记录存模块级 Map，不持久化、不膨胀 notes.json）
+        const baseTitle = note.title || '未命名';
+        const dupCount = state.notes.filter(n => (n.title || '未命名') === baseTitle).length;
+        const exportName = dupCount > 1 ? baseTitle + ' ' + note.id.slice(-4) : baseTitle;
         window.electronAPI.exportMarkdownFile(exportName, note.body || '').then(result => {
           if (result && result.ok) {
+            lastExportedBodies.set(note.id, note.body);
             if (status) status.textContent = '已保存到 ' + result.path;
           }
         });
@@ -1306,8 +1314,12 @@ function scheduleSave() {
   const snapshotNote = state.notes.find(n => n.id === snapshotId);
   const snapshotFilePath = snapshotNote ? snapshotNote.filePath : null;
   const snapshotBody = snapshotNote ? snapshotNote.body : null;
+  // L4 修复：notes/reminders 与 filePath/body 在同一时刻快照，
+  // 保证 notes.json 与外部 .md 文件内容一致（原先传活引用，两者可能不同步）
+  const snapshotNotes = JSON.parse(JSON.stringify(state.notes));
+  const snapshotReminders = JSON.parse(JSON.stringify(state.reminders.filter(r => !r.done)));
   saveTimer = setTimeout(async () => {
-    await window.electronAPI.saveData({ notes: state.notes, reminders: state.reminders.filter(r => !r.done), settings: settings });
+    await window.electronAPI.saveData({ notes: snapshotNotes, reminders: snapshotReminders, settings: settings });
     if (snapshotFilePath) {
       // 用快照时的 body 和 filePath 写入，不读最新的 state.selectedId
       const ok = await window.electronAPI.saveFile(snapshotFilePath, snapshotBody || '');
@@ -2054,8 +2066,9 @@ function renderUsage() {
       var maxCost = Math.max.apply(null, models.map(function(m) { return m.cost || 0; }));
       mh = models.map(function(m) {
         var pw = maxCost > 0 ? (m.cost / maxCost * 100) : 0;
+        // M4 修复：模型名来自本地日志解析，未经转义直接拼 innerHTML 存在注入风险
         return '<div class="usage-model-row">' +
-          '<span class="usage-model-name">' + m.name + "</span>" +
+          '<span class="usage-model-name">' + escapeHtml(m.name) + "</span>" +
           '<div class="usage-model-bar"><div class="usage-model-bar-fill" style="width:' + pw + '%"></div></div>' +
           '<span class="usage-model-pct">' +
           (d.total_cost > 0 ? (m.cost / d.total_cost * 100).toFixed(1) : "0") + "%</span>" +
@@ -2176,16 +2189,17 @@ function setupUsage() {
           _usageServerRunning = true;
           renderUsage();
         } else {
+          // M4 修复：错误信息可能含服务端返回的任意文本，拼 innerHTML 前先转义
           document.getElementById("usage-section").innerHTML =
             '<div class="usage-server-notice"><div class="notice-title">启动失败</div>' +
-            '<div class="notice-desc">' + (result && result.error ? result.error : "服务启动超时，请检查 Python / uvicorn 是否安装") + '</div>' +
+            '<div class="notice-desc">' + escapeHtml(result && result.error ? result.error : "服务启动超时，请检查 Python / uvicorn 是否安装") + '</div>' +
             '<button class="btn btn-primary" id="btn-start-tokdash-server">重试</button></div>';
         }
       })
       .catch(function(err) {
         document.getElementById("usage-section").innerHTML =
           '<div class="usage-server-notice"><div class="notice-title">启动失败</div>' +
-          '<div class="notice-desc">' + (err && err.message ? err.message : "IPC调用失败") + '</div>' +
+          '<div class="notice-desc">' + escapeHtml(err && err.message ? err.message : "IPC调用失败") + '</div>' +
           '<button class="btn btn-primary" id="btn-start-tokdash-server">重试</button></div>';
       });
     }
