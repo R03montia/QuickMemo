@@ -10,6 +10,7 @@ import json
 import os
 import re
 import sqlite3
+import subprocess
 import time as _time
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
@@ -68,6 +69,62 @@ def _glob_sigs(pattern: str) -> tuple:
         except (FileNotFoundError, OSError):
             continue
     return tuple(sorted(items))
+
+
+# ---------------------------------------------------------------------------
+# WSL Codex session discovery.
+#
+# tokdash often runs as a *Windows* Python process while Codex itself runs
+# inside WSL, where session JSONLs land in the WSL $HOME/.codex/sessions —
+# reachable from Windows only via the \\\\wsl.localhost\\<distro> share.  The
+# share root does not enumerate reliably, so we discover registered distros
+# through ``wsl.exe -l -q`` and probe each distro's /root/.codex/sessions.
+# Results are cached briefly so per-request parser construction stays cheap.
+# ---------------------------------------------------------------------------
+_WSL_PROBE_TTL = float(os.environ.get("TOKDASH_WSL_PROBE_TTL", "30.0"))
+_wsl_codex_dirs_cache = None
+_wsl_codex_dirs_cached_at = 0.0
+
+
+def _discover_wsl_codex_sessions_dirs() -> tuple:
+    """Return existing WSL Codex session dirs, cached within _WSL_PROBE_TTL."""
+    global _wsl_codex_dirs_cache, _wsl_codex_dirs_cached_at
+    now = _time.monotonic()
+    if _wsl_codex_dirs_cache is not None and (now - _wsl_codex_dirs_cached_at) < _WSL_PROBE_TTL:
+        return _wsl_codex_dirs_cache
+
+    found: List[Path] = []
+    # Manual override wins: comma/;-separated dirs, e.g. toml-style escaping
+    # is not needed — plain UNC or absolute paths.
+    extra = os.environ.get("TOKDASH_CODEX_WSL_DIRS", "").strip()
+    if extra:
+        for chunk in re.split(r"[;,]", extra):
+            chunk = chunk.strip()
+            if chunk:
+                found.append(Path(chunk))
+
+    try:
+        proc = subprocess.run(
+            ["wsl.exe", "-l", "-q"], capture_output=True, timeout=5
+        )
+        # wsl.exe emits UTF-16LE here; drop NUL bytes so UTF-8 decoding is safe.
+        out = proc.stdout.replace(b"\x00", b"").decode("utf-8", "replace")
+        for line in out.splitlines():
+            line = line.strip()
+            if not line or line.lower().startswith("windows") or line.startswith("-"):
+                continue
+            cand = Path(r"\\wsl.localhost") / line / "root" / ".codex" / "sessions"
+            try:
+                if cand.is_dir():
+                    found.append(cand)
+            except OSError:
+                continue
+    except Exception:
+        pass
+
+    _wsl_codex_dirs_cache = tuple(dict.fromkeys(found))
+    _wsl_codex_dirs_cached_at = now
+    return _wsl_codex_dirs_cache
 
 
 class BaseParser(ABC):
@@ -266,7 +323,8 @@ class CodexParser(BaseParser):
 
     def __init__(self, pricing_db: PricingDatabase):
         super().__init__(pricing_db)
-        self.sessions_dir = Path.home() / ".codex/sessions"
+        self.sessions_dir = Path.home() / ".codex" / "sessions"
+        self.wsl_sessions_dirs = list(_discover_wsl_codex_sessions_dirs())
 
     @staticmethod
     def _infer_provider(model: str, fallback: str = "openai") -> str:
@@ -280,7 +338,10 @@ class CodexParser(BaseParser):
         return fallback
 
     def _file_signatures(self) -> tuple:
-        return _timed_sigs(f"codex:{self.sessions_dir}", lambda: _rglob_sigs(self.sessions_dir))
+        sigs = list(_timed_sigs(f"codex:{self.sessions_dir}", lambda: _rglob_sigs(self.sessions_dir)))
+        for wdir in self.wsl_sessions_dirs:
+            sigs.extend(_timed_sigs(f"codex:{wdir}", lambda d=wdir: _rglob_sigs(d)))
+        return tuple(sorted(sigs))
 
     def _parse_all(self) -> List[Dict[str, Any]]:
         out: List[Dict[str, Any]] = []
