@@ -69,37 +69,45 @@ function scheduleReminders() {
   reminderTimers.clear();
   const data = readData();
   const now = Date.now();
-  const MAX_TIMEOUT = 2147483647; // setTimeout 上限约 24.8 天，超了会溢出立即触发
+  const MAX_TIMEOUT = 2147483647; // setTimeout 上限约 24.8 天，超过时用分段调度避免溢出
   for (const reminder of data.reminders) {
     if (reminder.done) continue;
     const t = new Date(reminder.time).getTime();
     if (!Number.isFinite(t)) continue;
     const delay = t - now;
     if (delay <= 0) continue;
-    if (delay > MAX_TIMEOUT) continue; // 太远的提醒等下次调度再建 timer，避免溢出误触
     const reminderId = reminder.id;
-    const timer = setTimeout(() => {
-      // 触发时重读最新数据，避免用调度时刻的旧快照覆盖这段时间的新笔记
-      let fresh = null;
-      try { fresh = readData(); } catch { fresh = null; }
-      const note = fresh ? fresh.notes.find(n => n.id === reminder.noteId) : data.notes.find(n => n.id === reminder.noteId);
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.show();
-        mainWindow.focus();
-      }
-      new Notification({
-        title: 'QuickMemo 提醒',
-        body: note ? note.title : '你有新的提醒事项',
-        silent: false,
-      }).show();
-      try {
-        const d2 = fresh || readData();
-        const r = d2.reminders.find(x => x.id === reminderId);
-        if (r) { r.done = true; writeData(d2); }
-      } catch (e) {
-        console.warn('[QuickMemo] reminder done write failed', e.message);
-      }
-    }, delay);
+    let timer;
+    if (delay > MAX_TIMEOUT) {
+      // 超过 setTimeout 上限：先挂一个到上限的分段 timer，到点后重新调度，
+      // 避免直接丢弃远提醒，也避免溢出导致 setTimeout 立即触发
+      timer = setTimeout(() => {
+        try { scheduleReminders(); } catch (e) { console.error('[QuickMemo] re-schedule reminders failed', e); }
+      }, MAX_TIMEOUT);
+    } else {
+      timer = setTimeout(() => {
+        // 触发时重读最新数据，避免用调度时刻的旧快照覆盖这段时间的新笔记
+        let fresh = null;
+        try { fresh = readData(); } catch { fresh = null; }
+        const note = fresh ? fresh.notes.find(n => n.id === reminder.noteId) : data.notes.find(n => n.id === reminder.noteId);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.show();
+          mainWindow.focus();
+        }
+        new Notification({
+          title: 'QuickMemo 提醒',
+          body: note ? note.title : '你有新的提醒事项',
+          silent: false,
+        }).show();
+        try {
+          const d2 = fresh || readData();
+          const r = d2.reminders.find(x => x.id === reminderId);
+          if (r) { r.done = true; writeData(d2); }
+        } catch (e) {
+          console.warn('[QuickMemo] reminder done write failed', e.message);
+        }
+      }, delay);
+    }
     reminderTimers.set(reminder.id, timer);
   }
 }
