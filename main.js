@@ -5,6 +5,12 @@ const fs = require('fs');
 const net_module = require('net');
 
 const DATA_FILE = path.join(__dirname, 'data', 'notes.json');
+
+// 启动期兜底：只记日志，方便定位“拉起来就关”类问题
+try {
+  process.on('uncaughtException', (e) => console.error('[QuickMemo] uncaughtException:', e));
+  process.on('unhandledRejection', (e) => console.error('[QuickMemo] unhandledRejection:', e));
+} catch {}
 const DEFAULT_SHORTCUT = 'CommandOrControl+Shift+Q';
 let mainWindow = null;
 let tray = null;
@@ -63,27 +69,38 @@ function scheduleReminders() {
   reminderTimers.clear();
   const data = readData();
   const now = Date.now();
+  const MAX_TIMEOUT = 2147483647; // setTimeout 上限约 24.8 天，超了会溢出立即触发
   for (const reminder of data.reminders) {
     if (reminder.done) continue;
     const t = new Date(reminder.time).getTime();
+    if (!Number.isFinite(t)) continue;
     const delay = t - now;
-    if (delay > 0) {
-      const timer = setTimeout(() => {
-        const note = data.notes.find(n => n.id === reminder.noteId);
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.show();
-          mainWindow.focus();
-        }
-        new Notification({
-          title: 'QuickMemo 提醒',
-          body: note ? note.title : '你有新的提醒事项',
-          silent: false,
-        }).show();
-        reminder.done = true;
-        writeData(data);
-      }, delay);
-      reminderTimers.set(reminder.id, timer);
-    }
+    if (delay <= 0) continue;
+    if (delay > MAX_TIMEOUT) continue; // 太远的提醒等下次调度再建 timer，避免溢出误触
+    const reminderId = reminder.id;
+    const timer = setTimeout(() => {
+      // 触发时重读最新数据，避免用调度时刻的旧快照覆盖这段时间的新笔记
+      let fresh = null;
+      try { fresh = readData(); } catch { fresh = null; }
+      const note = fresh ? fresh.notes.find(n => n.id === reminder.noteId) : data.notes.find(n => n.id === reminder.noteId);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+      new Notification({
+        title: 'QuickMemo 提醒',
+        body: note ? note.title : '你有新的提醒事项',
+        silent: false,
+      }).show();
+      try {
+        const d2 = fresh || readData();
+        const r = d2.reminders.find(x => x.id === reminderId);
+        if (r) { r.done = true; writeData(d2); }
+      } catch (e) {
+        console.warn('[QuickMemo] reminder done write failed', e.message);
+      }
+    }, delay);
+    reminderTimers.set(reminder.id, timer);
   }
 }
 
@@ -97,7 +114,9 @@ function getShortcut() {
 function getMdFileFromArgs(argv) {
   if (!argv) return null;
   for (const arg of argv) {
-    if (arg.endsWith('.md') || arg.endsWith('.markdown') || arg.endsWith('.txt')) {
+    if (typeof arg !== 'string') continue;
+    const lower = arg.toLowerCase();
+    if (lower.endsWith('.md') || lower.endsWith('.markdown') || lower.endsWith('.txt')) {
       return arg;
     }
   }
@@ -135,20 +154,25 @@ function registerGlobalShortcut(accelerator) {
     if (!ok) {
       console.warn('[QuickMemo] failed to register shortcut', accelerator);
     }
+    return !!ok;
   } catch (e) {
     console.warn('[QuickMemo] shortcut registration error', e.message);
+    return false;
   }
 }
 
 function setShortcut(accelerator) {
+  // 先注册，失败就不落盘，避免坏快捷键永久生效
+  const ok = registerGlobalShortcut(accelerator);
+  if (!ok) return false;
   const d = readData();
   d.settings = d.settings || {};
   d.settings.shortcut = accelerator;
   writeData(d);
-  registerGlobalShortcut(accelerator);
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('shortcut-changed', accelerator);
   }
+  return true;
 }
 
 // ====== 主题管理（theme 和 mode 独立） ======
@@ -277,11 +301,21 @@ function updateTrayMenu() {
 
 // ====== 托盘 ======
 function createTray() {
-  const iconPath = path.join(__dirname, 'assets', 'tray.png');
-  tray = new Tray(nativeImage.createFromPath(iconPath));
-  tray.setToolTip('QuickMemo');
-  updateTrayMenu();
-  tray.on('click', () => toggleWindow());
+  try {
+    const iconPath = path.join(__dirname, 'assets', 'tray.png');
+    const img = nativeImage.createFromPath(iconPath);
+    if (img.isEmpty()) {
+      console.warn('[QuickMemo] tray icon empty/missing, skip tray:', iconPath);
+      return;
+    }
+    tray = new Tray(img);
+    tray.setToolTip('QuickMemo');
+    updateTrayMenu();
+    tray.on('click', () => toggleWindow());
+  } catch (e) {
+    console.error('[QuickMemo] createTray failed, continue without tray:', e.message);
+    tray = null;
+  }
 }
 
 function toggleWindow() {
@@ -354,6 +388,7 @@ app.isQuitting = false;
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
+  console.log('[QuickMemo] another instance is running, quitting this one');
   app.quit();
 } else {
   app.on('second-instance', (_event, argv) => {
@@ -485,7 +520,7 @@ ipcMain.handle('save-file', (_, { filePath, content }) => {
 });
 ipcMain.handle('get-shortcut', () => getShortcut());
 ipcMain.handle('set-shortcut', (_, accelerator) => {
-  try { setShortcut(accelerator); return true; }
+  try { return setShortcut(accelerator); }
   catch (e) { return false; }
 });
 ipcMain.handle('get-window-bounds', () => {
@@ -515,7 +550,8 @@ ipcMain.handle('set-panel-alpha', (_, alpha) => {
 ipcMain.handle('export-markdown-file', async (_, { filename, content }) => {
   try {
     const homeDir = app.getPath('home');
-    const safeName = filename.replace(/[^a-zA-Z0-9_一-鿿-]/g, '_');
+    const base = String(filename || '未命名').trim().slice(0, 120) || '未命名';
+    const safeName = base.replace(/[\\/]/g, '_').replace(/[^a-zA-Z0-9_\u4e00-\u9fff\- .]/g, '_').replace(/\.+$/, '').replace(/^\.+/, '').trim() || '未命名';
     const filePath = path.join(homeDir, 'QuickMemo_exports', safeName + '.md');
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, content, 'utf-8');
@@ -596,13 +632,16 @@ ipcMain.handle('notems-put', async (_, { key, content }) => {
             }
           });
         `).then(ok => {
-          // 给页面一点时间提交
-          setTimeout(() => finish(true), 2000);
+          // 给页面一点时间提交，透传真实结果而不是永远 true
+          setTimeout(() => finish(!!ok), 2000);
         }).catch(() => finish(false));
       } catch { finish(false); }
     });
 
     saveWin.webContents.on('did-fail-load', () => finish(false));
+
+    // 兜底超时：页面吊死也不让 Ctrl+S 卡住
+    setTimeout(() => finish(false), 15000);
 
     saveWin.loadURL('https://note.ms/' + encodeURIComponent(key));
   });
@@ -668,12 +707,15 @@ ipcMain.handle('getnote-put', async (_, { key, content }) => {
             xhr.send('text=' + encodeURIComponent(ta.value));
           });
         `).then(ok => {
-          setTimeout(() => finish(true), 2000);
+          setTimeout(() => finish(!!ok), 2000);
         }).catch(() => finish(false));
       } catch { finish(false); }
     });
 
     saveWin.webContents.on('did-fail-load', () => finish(false));
+
+    // 兜底超时：页面吊死也不让 Ctrl+S 卡住
+    setTimeout(() => finish(false), 15000);
 
     saveWin.loadURL('https://getnote.top/' + encodeURIComponent(key));
   });
@@ -718,6 +760,8 @@ function startAIServer() {
   aiServer.on('error', (e) => {
     if (e.code === 'EACCES') {
       console.warn('QuickMemo AI pipe access denied, retrying with elevated permissions');
+    } else {
+      console.warn('[QuickMemo] AI pipe error (' + (e.code || 'unknown') + '):', e.message);
     }
   });
 }
@@ -750,7 +794,7 @@ function handleAICommand(cmd, respond) {
       if (!noteId) { respond({ error: 'noteId required' }); return; }
       const note = allData.notes.find(n => n.id === noteId);
       if (!note) { respond({ error: 'Note not found' }); return; }
-      respond({ ok: true, note: { id: note.id, title: note.title, body: note.body, createdAt: note.createdAt, updatedAt: note.updatedAt, notemsKey: note.notemsKey || null, filePath: note.filePath || null } });
+      respond({ ok: true, note: { id: note.id, title: note.title, body: note.body, createdAt: note.createdAt, updatedAt: note.updatedAt, notemsKey: note.notemsKey || null, getnoteKey: note.getnoteKey || null, filePath: note.filePath || null } });
       break;
     }
     case 'create_note': {
@@ -828,7 +872,7 @@ function startTokdash() {
   const tm = path.join(__dirname, "tokdash", "cli.py");
   if (!fs.existsSync(tm)) { console.warn("[QuickMemo] tokdash/cli.py not found in " + __dirname); tokdashStarting = false; return; }
   killTokdashPort();
-  const cmds = process.platform === "win32" ? ["py", "python3", "python"] : ["python3", "python"];
+  const cmds = process.platform === "win32" ? ["py", "python", "python3"] : ["python3", "python"];
   function ts(i) {
     if (i >= cmds.length) { console.warn("[QuickMemo] No Python interpreter found for Tokdash"); tokdashStarting = false; return; }
     try {

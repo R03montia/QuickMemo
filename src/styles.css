@@ -2371,22 +2371,22 @@ body.resizing * { cursor: col-resize !important; user-select: none !important; }
 /* ============================================================
    强调色选中态（深色 / 亮色主题）
    ============================================================ */
-[data-theme="dark"] .note-item.active {
+[data-mode="dark"] .note-item.active {
   background: color-mix(in srgb, var(--accent) 20%, transparent);
   border-color: color-mix(in srgb, var(--accent) 35%, transparent);
 }
-[data-theme="dark"] .settings-option.active {
+[data-mode="dark"] .settings-option.active {
   background: color-mix(in srgb, var(--accent) 22%, transparent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
 }
-[data-theme="dark"] .multi-toolbar {
+[data-mode="dark"] .multi-toolbar {
   background: color-mix(in srgb, var(--accent) 15%, transparent);
   border-color: color-mix(in srgb, var(--accent) 35%, transparent);
 }
-[data-theme="dark"] .multi-count { color: var(--accent-on-dark); }
-[data-theme="dark"] .reminder-badge { color: #0a0a0a; }
-[data-theme="dark"] .cal-day.selected { color: white; }
-[data-theme="dark"] .tw-item.tw-selected { color: var(--accent-on-dark); }
+[data-mode="dark"] .multi-count { color: var(--accent-on-dark); }
+[data-mode="dark"] .reminder-badge { color: #0a0a0a; }
+[data-mode="dark"] .cal-day.selected { color: white; }
+[data-mode="dark"] .tw-item.tw-selected { color: var(--accent-on-dark); }
 
 /* ============================================================
    兼容 prefers-reduced-motion
@@ -2502,7 +2502,7 @@ body.resizing * { cursor: col-resize !important; user-select: none !important; }
 }
 
 /* ====== 暗色适配 ====== */
-[data-theme="dark"] .toast {
+[data-mode="dark"] .toast {
   background: var(--glass-bg);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);

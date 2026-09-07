@@ -1,4 +1,4 @@
-﻿// Auto-install Python dependencies for Tokdash statistics service.
+// Auto-install Python dependencies for Tokdash statistics service.
 // Runs as npm postinstall — non-fatal on failure so npm install always succeeds.
 
 const { execSync } = require("child_process");

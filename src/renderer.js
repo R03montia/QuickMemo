@@ -356,7 +356,12 @@ function updateMaximizeIcon() {
 
 async function toggleMaximize() {
   await window.electronAPI.maximize();
-  isWindowMaximized = !isWindowMaximized;
+  // 以主进程真实状态为准，避免本地翻转与双击标题栏/系统事件打架
+  try {
+    isWindowMaximized = await window.electronAPI.isMaximized();
+  } catch {
+    isWindowMaximized = !isWindowMaximized;
+  }
   updateMaximizeIcon();
 }
 
@@ -809,7 +814,7 @@ function renderEditor(id) {
     MarkdownEditor.init(bodyContainer, note.body || '', useMarkdown);
   } catch (e) {
     console.error('MarkdownEditor.init error:', e);
-    bodyContainer.innerHTML = '<textarea style="width:100%;height:100%;background:transparent;color:inherit;border:none;resize:none;padding:8px;font:inherit;">' + (note.body || '').replace(/</g, '&lt;') + '</textarea>';
+    bodyContainer.innerHTML = '<textarea style="width:100%;height:100%;background:transparent;color:inherit;border:none;resize:none;padding:8px;font:inherit;">' + escapeHtml(note.body || '') + '</textarea>';
   }
 
   // 同步模式切换按钮 UI（注意：updateModeToggleUI 可能在 setupEditor 之前就已被调用，
@@ -1039,6 +1044,10 @@ function setupEditor() {
   btnSet.addEventListener('click', async () => {
     const dt = getPickerDateTime();
     if (!dt || isNaN(dt.getTime())) return;
+    if (dt.getTime() <= Date.now()) {
+      showToastMessage('提醒时间必须晚于现在');
+      return;
+    }
     dismissPicker();
     const reminder = await window.electronAPI.setReminder(state.selectedId, dt.toISOString());
     state.reminders.push(reminder);
@@ -1084,7 +1093,13 @@ function setupEditor() {
     btn.classList.add('spin');
     const content = document.getElementById('btn-refresh-notems').dataset.service === 'getnote' ? await window.electronAPI.getGetnoteContent(key) : await window.electronAPI.getNotemsContent(key);
     btn.classList.remove('spin');
-    if (content) {
+    if (!content) return;
+    // 解析失败的调试串绝不能覆盖正文
+    if (content.startsWith('__DEBUG__:') || content.startsWith('__ERROR__:')) {
+      showToastMessage('刷新失败：' + content.replace(/^__(?:DEBUG|ERROR)__:/, '').slice(0, 200));
+      return;
+    }
+    {
       const note = state.notes.find(n => n.id === state.selectedId);
       if (note) {
         note.body = content;
@@ -1300,17 +1315,22 @@ function scheduleSave() {
   if (currentNote && bodyContainer) {
     currentNote.body = MarkdownEditor.getContent(bodyContainer);
   }
-  // A7 修复：调度时立刻快照当前选中笔记和filePath，
-  // 避免 500ms 延迟期间用户切走笔记导致 saveFile 写到错误文件
+  // A7 修复：快照笔记 id + filePath（防切走写错文件），
+  // body 在触发时按 id 取最新值，避免 500ms 内继续打字被旧快照丢掉
   const snapshotId = state.selectedId;
   const snapshotNote = state.notes.find(n => n.id === snapshotId);
   const snapshotFilePath = snapshotNote ? snapshotNote.filePath : null;
-  const snapshotBody = snapshotNote ? snapshotNote.body : null;
   saveTimer = setTimeout(async () => {
+    // 落盘前再同步一次编辑器内容，防止防抖窗口内的输入丢失
+    try {
+      const bc = document.getElementById('note-body-container');
+      const cur = state.notes.find(n => n.id === state.selectedId);
+      if (cur && bc) cur.body = MarkdownEditor.getContent(bc);
+    } catch {}
     await window.electronAPI.saveData({ notes: state.notes, reminders: state.reminders.filter(r => !r.done), settings: settings });
     if (snapshotFilePath) {
-      // 用快照时的 body 和 filePath 写入，不读最新的 state.selectedId
-      const ok = await window.electronAPI.saveFile(snapshotFilePath, snapshotBody || '');
+      const freshNote = state.notes.find(n => n.id === snapshotId);
+      const ok = await window.electronAPI.saveFile(snapshotFilePath, (freshNote ? freshNote.body : '') || '');
       if (status) status.textContent = ok ? '已保存到文件' : '文件保存失败';
     } else {
       if (status) status.textContent = '已自动保存';
@@ -1499,9 +1519,9 @@ function setupSettings() {
       const acc = await window.electronAPI.getShortcut();
       // 显示格式：CommandOrControl+Shift+K → Ctrl+Shift+K
       input.value = acc
-        .replace('CommandOrControl', 'Ctrl')
-        .replace('Command', 'Cmd')
-        .replace('+', ' + ');
+        .replaceAll('CommandOrControl', 'Ctrl')
+        .replaceAll('Command', 'Cmd')
+        .replaceAll('+', ' + ');
       if (status) status.textContent = '点击输入框后按下新快捷键组合';
     } catch (e) {
       input.value = '加载失败';
@@ -1739,8 +1759,11 @@ function setupSettings() {
   if (btnResetCss) {
     btnResetCss.addEventListener('click', () => {
       const textarea = document.getElementById('custom-css-input');
-      if (textarea) textarea.value = getDefaultCSS();
-      applyCustomCSS(getDefaultCSS());
+      const def = getDefaultCSS();
+      if (textarea) textarea.value = def;
+      // 重置也要落盘，否则重启后又恢复旧样式
+      saveCustomCSS(def);
+      showToastMessage('已恢复默认样式');
     });
   }
 

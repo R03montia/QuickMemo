@@ -230,6 +230,8 @@ def period_to_days(period: str) -> int:
             "today": 1,
             "3days": 3,
             "week": 7,
+            "7d": 7,
+            "30d": 30,
             "14days": 14,
             "month": 30,
             "year": 365,
