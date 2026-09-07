@@ -1976,7 +1976,9 @@ body.resizing * { cursor: col-resize !important; user-select: none !important; }
 /* ============================================================
    设置面板
    ============================================================ */
-#settings-section {
+/* 只允许 data-view="settings" 时显示，否则 ID 选择器会压过
+   .main[data-view=...] 的隐藏规则，导致切到 usage/editor 后设置页残留。 */
+.main[data-view="settings"] #settings-section {
   flex: 1;
   display: flex;
   flex-direction: column;

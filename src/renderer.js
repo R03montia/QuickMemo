@@ -590,8 +590,7 @@ function deleteNote(noteId) {
       if (state.notes.length > 0) selectNote(state.notes[0].id);
       else {
         state.selectedId = null;
-        document.getElementById('note-editor').style.display = 'none';
-        document.getElementById('empty-state').style.display = 'block';
+        setMainView('empty');
       }
     }
     renderSidebar();
@@ -705,7 +704,7 @@ function deleteMultiNotes() {
     document.getElementById('multi-toolbar').style.display = 'none';
     if (selectedWasDeleted) {
       if (state.notes.length > 0) selectNote(state.notes[0].id);
-      else { state.selectedId = null; document.getElementById('note-editor').style.display = 'none'; document.getElementById('empty-state').style.display = 'block'; }
+      else { state.selectedId = null; setMainView('empty'); }
     }
     renderSidebar();
     scheduleSave();
@@ -757,7 +756,6 @@ function setupMultiToolbar() {
 }
 
 function selectNote(id) {
-  hideUsage();
   if (state.multiMode) exitMultiSelect();
   state.selectedId = id;
   state.multiSelected.clear();
@@ -767,10 +765,36 @@ function selectNote(id) {
   document.querySelectorAll('.note-item').forEach(el => el.classList.toggle('active', el.dataset.id === id));
 }
 
-// 防御：控制 .main 的 data-view 属性，确保只有 empty / editor / settings 之一可见
+// 主区域视图切换的唯一入口：同时控制
+//   1. .main 的 data-view（决定 empty / editor / settings / usage 哪个面板可见）；
+//   2. 四个面板的 inline display（一律清掉，避免旧代码残留的 inline 盖过 data-view 规则）；
+//   3. 侧栏形态（设置视图显示设置导航，其余显示笔记列表）；
+//   4. settingsOpen 状态。
+// 之前 openSettings / showUsage 各自直接改 inline display，互相不清理，
+// 多点几次“设置/统计”后会出现主区多个面板同时可见/错位。
 function setMainView(view) {
   const main = document.getElementById('main-content');
   if (main) main.setAttribute('data-view', view);
+
+  ['empty-state', 'note-editor', 'settings-section', 'usage-section'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.removeProperty('display');
+  });
+
+  const sidebarHeader = document.getElementById('sidebar-header');
+  const noteList = document.getElementById('note-list');
+  const settingsNav = document.getElementById('settings-nav');
+  const inSettings = view === 'settings';
+  if (inSettings) {
+    if (sidebarHeader) sidebarHeader.style.display = 'none';
+    if (noteList) noteList.style.display = 'none';
+    if (settingsNav) settingsNav.style.display = 'flex';
+  } else {
+    if (sidebarHeader) sidebarHeader.style.display = '';
+    if (noteList) noteList.style.display = '';
+    if (settingsNav) settingsNav.style.display = 'none';
+  }
+  settingsOpen = inSettings;
 }
 
 // ====== 编辑器 ======
@@ -780,8 +804,7 @@ function renderEditor(id) {
   const empty = document.getElementById('empty-state');
   const fabReminder = document.getElementById('fab-reminder');
   if (!note) {
-    editor.style.display = 'none';
-    empty.style.display = 'block';
+    setMainView('empty');
     // 没有选中笔记时，隐藏 fab-reminder（仅在编辑器可见时显示）
     if (fabReminder) fabReminder.style.display = 'none';
     return;
@@ -1079,7 +1102,7 @@ function setupEditor() {
     for (const r of state.reminders.filter(r => r.noteId === id)) await window.electronAPI.cancelReminder(r.id);
     state.reminders = state.reminders.filter(r => r.noteId !== id);
     if (state.notes.length > 0) selectNote(state.notes[0].id);
-    else { state.selectedId = null; renderSidebar(); document.getElementById('note-editor').style.display = 'none'; document.getElementById('empty-state').style.display = 'block'; }
+    else { state.selectedId = null; setMainView('empty'); renderSidebar(); }
     scheduleSave();
   });
 
@@ -1433,39 +1456,19 @@ async function updateStoredSettings() {
 }
 
 function setupSettings() {
-  const sidebarHeader = document.getElementById('sidebar-header');
-  const noteList = document.getElementById('note-list');
-  const settingsNav = document.getElementById('settings-nav');
-  const settingsSection = document.getElementById('settings-section');
-
   function openSettings() {
-    hideUsage();
-    settingsOpen = true;
-    // 侧栏切换
-    sidebarHeader.style.display = 'none';
-    noteList.style.display = 'none';
-    settingsNav.style.display = 'flex';
-    // 主区域切换 —— 用 data-view + inline style 双保险
+    // setMainView 统一处理：data-view、四面板 inline 清理、侧栏切换、settingsOpen
     setMainView('settings');
-    document.getElementById('empty-state').style.display = 'none';
-    document.getElementById('note-editor').style.display = 'none';
-    settingsSection.style.display = 'flex';
     // 默认打开主题页
     switchSettingsSection('theme');
   }
 
   function closeSettings() {
-    settingsOpen = false;
-    sidebarHeader.style.display = '';
-    noteList.style.display = '';
-    settingsNav.style.display = 'none';
-    settingsSection.style.display = 'none';
     if (state.selectedId) {
       setMainView('editor');
       renderEditor(state.selectedId);
     } else {
       setMainView('empty');
-      document.getElementById('empty-state').style.display = 'flex';
     }
   }
 
@@ -1978,19 +1981,17 @@ let _usagePeriod = "today";
 const _periodLabels = { today:"今日", "7d":"近7日", "30d":"近30日", month:"本月" };
 
 function showUsage() {
-  var u = document.getElementById("usage-section");
-  var e = document.getElementById("empty-state");
-  var ed = document.getElementById("note-editor");
-  var s = document.getElementById("settings-section");
-  if (e) e.style.display = "none";
-  if (ed) ed.style.display = "none";
-  if (s) s.style.display = "none";
-  if (u) { u.style.display = "block"; setMainView("usage"); if (!_usageServerRunning) { renderUsage(); window.electronAPI.tokdashFetch("/api/stats").then(function(r) { if (r && !r.error) { _usageServerRunning = true; renderUsage(); } }); } else { renderUsage(); } }
-}
-
-function hideUsage() {
-  var u = document.getElementById("usage-section");
-  if (u) u.style.display = "none";
+  // 统一走 setMainView：先清掉四个面板的残留 inline、把侧栏切回笔记列表，
+  // 再让 CSS 按 data-view="usage" 显示 usage-section（flex 布局，不能再用 block）。
+  setMainView("usage");
+  if (!_usageServerRunning) {
+    renderUsage();
+    window.electronAPI.tokdashFetch("/api/stats").then(function(r) {
+      if (r && !r.error) { _usageServerRunning = true; renderUsage(); }
+    });
+  } else {
+    renderUsage();
+  }
 }
 
 function fmtTok(v) {
@@ -2216,7 +2217,6 @@ function setupUsage() {
 }
 
 init();
-
 
 
 
