@@ -2,28 +2,47 @@
 //   - 'source'  模式：textarea，显示原始 Markdown 源码，可编辑
 //   - 'preview' 模式：只读 div，显示渲染后的 Markdown
 //   切换模式时保留内容；预览始终基于源内容重新渲染。
+//   打开笔记默认进 preview（阅读优先），用户手动切换后本次会话沿用该选择。
 const MarkdownEditor = (() => {
   let container = null;
   let currentMode = 'source'; // 'source' | 'preview'
+  let preferredMode = 'preview'; // 打开笔记时的默认视图，用户手切后跟随
   let scrollEl = null;        // 当前可滚动元素（textarea 或 preview div）
 
   function getMarked() {
     return (typeof marked !== 'undefined') ? marked : null;
   }
 
-  // XSS protection: 转义 HTML 实体后再交给 marked
-  function escapeHtmlEntities(s) {
-    return String(s).replace(/[&<>"']/g, c => ({
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-    })[c]);
+  // marked 默认放行原始 HTML，所以解析后再净化输出：
+  // 移除危险元素与 on* 事件属性，并把 URL 限制在安全协议内。
+  // 注意不能像以前那样在解析前整体转义实体——那会打断 "> 引用" 语法，
+  // 也会把行内代码里的 "<div>" 二次编码成 "&lt;div>"。
+  const BLOCKED_TAGS = new Set(['SCRIPT', 'IFRAME', 'OBJECT', 'EMBED', 'LINK', 'META', 'STYLE', 'BASE', 'FORM']);
+  const DANGEROUS_URL = /^\s*(?:javascript|vbscript|data:text\/html)/i;
+  // 交给系统浏览器打开的链接只认这三种协议，避免把本地路径甩给系统 shell
+  const EXTERNAL_URL = /^(?:https?|mailto):/i;
+
+  function sanitizeHtml(html) {
+    const tpl = document.createElement('template');
+    tpl.innerHTML = html;
+    tpl.content.querySelectorAll('*').forEach(el => {
+      if (BLOCKED_TAGS.has(el.tagName)) { el.remove(); return; }
+      for (const attr of [...el.attributes]) {
+        const name = attr.name.toLowerCase();
+        const isUrl = name === 'href' || name === 'src' || name === 'xlink:href';
+        if (name.startsWith('on') || name === 'style' || (isUrl && DANGEROUS_URL.test(attr.value))) {
+          el.removeAttribute(attr.name);
+        }
+      }
+    });
+    return tpl.innerHTML;
   }
 
   function renderMarkdown(text) {
     const m = getMarked();
     if (m) {
       try {
-        const safe = escapeHtmlEntities(text || '');
-        return m.parse(safe, { breaks: true, gfm: true });
+        return sanitizeHtml(m.parse(text || '', { breaks: true, gfm: true }));
       } catch {
         return escapePreview(text || '');
       }
@@ -147,12 +166,13 @@ const MarkdownEditor = (() => {
     root.appendChild(div);
     scrollEl = div;
 
-    // 拦截 <a> 点击：阻止默认跳转，转交系统浏览器打开
+    // 拦截 <a> 点击：阻止默认跳转，转交系统浏览器打开（仅限安全协议）
     div.addEventListener('click', (e) => {
       const a = e.target.closest('a');
       if (!a || !a.href) return;
       e.preventDefault();
       e.stopPropagation();
+      if (!EXTERNAL_URL.test(a.href)) return;
       if (window.electronAPI && window.electronAPI.openExternal) {
         window.electronAPI.openExternal(a.href).catch(() => {});
       }
@@ -184,6 +204,9 @@ const MarkdownEditor = (() => {
       clearContainer();
       container = cont;
 
+      // Markdown 笔记跟随用户偏好（首次为 preview），纯文本笔记恒为 source
+      currentMode = useMarkdown ? preferredMode : 'source';
+
       const root = document.createElement('div');
       root.className = useMarkdown ? 'md-editor md-editor-markdown' : 'md-editor md-editor-plain';
       root.setAttribute('data-mode', currentMode);
@@ -192,13 +215,9 @@ const MarkdownEditor = (() => {
       // 记住最近一次的源内容（供预览模式 getContent 读取）
       container._lastSourceContent = content || '';
 
-      if (!useMarkdown) {
-        // 纯文本模式：永远是 source 视图
-        currentMode = 'source';
-        mountSource(root, content);
+      if (currentMode === 'preview') {
+        mountPreview(root, content);
       } else {
-        // Markdown 模式：默认 source，用户可切到 preview
-        currentMode = 'source';
         mountSource(root, content);
       }
 
@@ -217,6 +236,7 @@ const MarkdownEditor = (() => {
       // 保存当前内容
       const content = this.getContent(container) || '';
       currentMode = mode;
+      preferredMode = mode;   // 记住用户的选择，切换笔记时沿用
       const root = container.querySelector('.md-editor');
       if (!root) return;
       root.setAttribute('data-mode', mode);
