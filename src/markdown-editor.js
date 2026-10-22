@@ -2,11 +2,11 @@
 //   - 'source'  模式：textarea，显示原始 Markdown 源码，可编辑
 //   - 'preview' 模式：只读 div，显示渲染后的 Markdown
 //   切换模式时保留内容；预览始终基于源内容重新渲染。
-//   打开笔记默认进 preview（阅读优先），用户手动切换后本次会话沿用该选择。
+//   打开笔记默认进 source（编辑优先），用户手动切换后本次会话沿用该选择。
 const MarkdownEditor = (() => {
   let container = null;
   let currentMode = 'source'; // 'source' | 'preview'
-  let preferredMode = 'preview'; // 打开笔记时的默认视图，用户手切后跟随
+  let preferredMode = 'source'; // 打开笔记时的默认视图，用户手切后跟随
   let scrollEl = null;        // 当前可滚动元素（textarea 或 preview div）
 
   function getMarked() {
@@ -204,7 +204,7 @@ const MarkdownEditor = (() => {
       clearContainer();
       container = cont;
 
-      // Markdown 笔记跟随用户偏好（首次为 preview），纯文本笔记恒为 source
+      // Markdown 笔记跟随用户偏好（首次为 source），纯文本笔记恒为 source
       currentMode = useMarkdown ? preferredMode : 'source';
 
       const root = document.createElement('div');
