@@ -15,12 +15,13 @@ Electron 备忘录应用，结构较复杂、牵一发而动全身。改动前�
 - 旧的"AI 自动生成标题"（generateAITitle、AI 设置面板、aiSettings）已在 commit `8c706b0` 移除；残留死代码（styles.css 的 `#btn-ai-title` 动画、main.js 未使用的 `safeStorage` import）也已清理。
 - `main.js` 里仍有一个 **AI CLI Named Pipe**（`\\.\pipe\QuickMemo_AI`，list_notes/get_note/create_note/...），是给外部 AI 工具用的，**不是**被删的"AI 标题"功能，别误删。
 
-## 3. 当前工作区的未提交改动（别覆盖 / 别一并提交）
+## 3. 工作区状态（2026-10-22 更新）
 
-有一批**未提交**改动，是新的 getnote.top 云同步 + 大笔记预览截断优化，与 bug 修复无关：
-
-- `main.js` / `preload.js`：新增 `getnote-get` / `getnote-put`（仿 note.ms 的另一个在线笔记服务）。
-- `src/renderer.js` / `index.html` / `markdown-editor.js` / `styles.css`：对应 UI，及 `PREVIEW_CHAR_LIMIT = 60000` 的预览截断。
+- 旧的 getnote.top 云同步（`getnote-get` / `getnote-put`）与大笔记预览截断
+  (`PREVIEW_CHAR_LIMIT = 60000`) 已提交进 main，**不再有"未提交改动"这一说**。
+- 目前唯一的未跟踪项：`落雨效果复现包/`（`demo.html` / `rain.css` / `traumarain.svg` /
+  `README.md`）。这是独立复现素材，尚未决定是否纳入版本库，**不要当正式代码依赖**，
+  也不要随手 `git add .` 把它带进提交。
 
 ## 4. 文件编码 BOM 坑
 
@@ -83,3 +84,38 @@ icacls "C:\Users\29981\Desktop\QuickMemo" /setintegritylevel Medium /T /C
 `Low Mandatory Level`，就是同一问题，重跑上面的命令。桌面图标又变白纸 = 同一个信号。
 **规避**：不要给会在目录上写 ACL / 完整性标签的沙箱工具，把含 `electron.exe`
 的项目目录本身当工作区用。
+
+## 8.1 `git` 报 `.git/index.lock: Permission denied`（2026-10-22 复现并定位）
+
+- **症状**：`git add` / `git commit` 一律失败，报
+  `fatal: Unable to create 'C:/.../.git/index.lock': Permission denied`；
+  但同一时刻其他文件能正常改（用 `write` / `edit` 工具写 `src/` 下的源码没问题）。
+- **根因是两条叠加**：
+  1. `C:\Users\29981\Desktop` 上多出一条显式 `Everyone:(CI)(DENY)(DC)`
+     （DENY DeleteChild），被 `.git` 等子目录继承 → git 建好 `index.lock` 后
+     没法替换/删除它。
+  2. agent 沙箱进程本身以 **Low 完整性**运行（`whoami /groups` 里是
+     `Mandatory Label\Low Mandatory Level`），而 `QuickMemo`、`.git` 是
+     显式 `Medium ... (NW)`（No-Write-Up）→ 低完整性进程写不进去。
+- **关键经验：只修 ACL 不够**。ACL 干净之后，若进程仍是 Low 完整性，git 照样
+  失败。最终是让 **git 以放宽沙箱的权限（DSH danger-full-access）执行**才成功；
+  低完整性下 `git push` 还会报
+  `schannel: AcquireCredentialsHandle failed: SEC_E_NO_CREDENTIALS`，同一原因
+  （读不到 Windows 凭据库），放宽后一并消失。
+- **诊断三步**：
+  ```powershell
+  icacls "C:\Users\29981\Desktop"                     # 找 DENY(DC) / Low Mandatory Level
+  icacls ".git"                                       # 找 .git 的显式 Low 标签
+  whoami /groups | Select-String -Pattern Mandatory   # 看当前进程完整性级别
+  ```
+- **修复**（在低完整性沙箱里需要 UAC 提权；普通 Medium 终端不需要）：
+  ```cmd
+  icacls "C:\Users\29981\Desktop" /remove:d Everyone
+  icacls "C:\Users\29981\Desktop\QuickMemo" /setintegritylevel Medium
+  icacls "C:\Users\29981\Desktop\QuickMemo\.git" /setintegritylevel Medium
+  ```
+  然后以 medium/放宽沙箱的进程跑 git。注意别对项目根加 `/T` 递归——会遍历
+  `node_modules`，非常慢；`.git` 的继承标签会在父级改完后自动跟随。
+- **复发判断**：`icacls "C:\Users\29981\Desktop"` 又出现 `Everyone:(CI)(DENY)(DC)`
+  或 `Low Mandatory Level`，就是同一问题，重跑上面的命令。
+- 排查时临时写的 `*.ps1` 提权脚本跑完记得删掉，不要留在工作区（本次已清理）。
