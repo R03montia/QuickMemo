@@ -6,6 +6,9 @@ data/
 # 例外：保留 .gitkeep 让目录结构可见
 !data/.gitkeep
 
+# ===== AI 记忆库（本地数据，勿提交；误删不可恢复） =====
+.dsh-meow/
+
 # ===== 工具/编辑器本地配置（per-user，不该提交） =====
 .claude/
 .superpowers/

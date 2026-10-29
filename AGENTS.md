@@ -119,3 +119,21 @@ icacls "C:\Users\29981\Desktop\QuickMemo" /setintegritylevel Medium /T /C
 - **复发判断**：`icacls "C:\Users\29981\Desktop"` 又出现 `Everyone:(CI)(DENY)(DC)`
   或 `Low Mandatory Level`，就是同一问题，重跑上面的命令。
 - 排查时临时写的 `*.ps1` 提权脚本跑完记得删掉，不要留在工作区（本次已清理）。
+
+## 9 透明无边框窗口的"最大化"必须自管（2026-10-29）
+
+`createWindow()` 是 `transparent: true` + `frame: false`，Windows 上这种窗口
+**不会进入真正的 WS_MAXIMIZE 状态**（实测 Electron 33）：
+
+- `win.maximize()` 只是把窗口撑到工作区，视觉上铺满；
+- `win.isMaximized()` **恒为 `false`**（`maximize` 事件会触发，但状态读出来仍是 false）；
+- `win.unmaximize()` **不会恢复尺寸**，窗口停在铺满状态。
+
+所以**不要**用 `isMaximized()` 判断状态、也不要指望 `unmaximize()` 还原——
+这正是"最大化后点最大化按钮无法还原"的根因（`maximize-window` 每次都走进
+最大化分支）。
+
+`main.js` 已改为自托管：`maximizeWindow()` / `unmaximizeWindow()` /
+`isWindowMaximized()`。最大化前记录 `restoreBounds`，还原时 `unmaximize()`
+之后强制 `setBounds(restoreBounds)`；`maximize-changed` 只用于刷新按钮图标。
+新增窗口状态相关逻辑时沿用这三个函数，别再直连 `isMaximized()`。

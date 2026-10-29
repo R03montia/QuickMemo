@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Notification, nativeTheme, systemPreferences, Tray, Menu, nativeImage, net, globalShortcut, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, Notification, nativeTheme, systemPreferences, Tray, Menu, nativeImage, net, globalShortcut, shell, screen } = require('electron');
 
 const path = require('path');
 const fs = require('fs');
@@ -333,6 +333,74 @@ function toggleWindow() {
 }
 
 // ====== 窗口 ======
+// 最大化状态由主进程自行托管。
+// 本窗口是 transparent + frameless：Windows 上 maximize() 只是把窗口撑满工作区，
+// 并不进入真正的 WS_MAXIMIZE 状态——实测 isMaximized() 恒为 false，unmaximize()
+// 也不会恢复尺寸。若直接依赖它们，"最大化后点最大化按钮"会再次走最大化分支，
+// 表现为点了无法还原。因此这里记录还原边框，还原时用 setBounds() 兜底回填。
+let winMaximized = false;
+let restoreBounds = null;
+let lastNormalBounds = null;
+let resizeCheckTimer = null;
+
+function isWindowMaximized() {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  return winMaximized || mainWindow.isMaximized();
+}
+
+function notifyMaximizeState() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const wc = mainWindow.webContents;
+  if (!wc || wc.isDestroyed()) return;
+  wc.send('maximize-changed', isWindowMaximized());
+}
+
+function maximizeWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (isWindowMaximized()) return;
+  // 只有处于还原状态时 getBounds() 才是可用的还原边框
+  const bounds = mainWindow.getBounds();
+  if (bounds.width <= 0 || bounds.height <= 0) return;
+  restoreBounds = bounds;
+  winMaximized = true;
+  const { workArea } = screen.getDisplayMatching(bounds);
+  try {
+    mainWindow.setBounds(workArea);
+  } catch (e) {
+    console.error('[QuickMemo] maximize failed, fallback to maximize():', e.message);
+    try { mainWindow.maximize(); } catch {}
+  }
+  notifyMaximizeState();
+}
+
+function unmaximizeWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  winMaximized = false;
+  try { mainWindow.unmaximize(); } catch {}
+  // unmaximize() 在透明无边框窗口上不恢复尺寸，手动回填
+  if (restoreBounds) {
+    try { mainWindow.setBounds(restoreBounds); } catch {}
+    restoreBounds = null;
+  }
+  notifyMaximizeState();
+}
+
+// 用户拖拽边框改变大小时退出"最大化"标记（否则按钮语义会错位）
+function scheduleResizeCheck() {
+  if (resizeCheckTimer) clearTimeout(resizeCheckTimer);
+  resizeCheckTimer = setTimeout(() => {
+    resizeCheckTimer = null;
+    if (!winMaximized || !mainWindow || mainWindow.isDestroyed()) return;
+    const b = mainWindow.getBounds();
+    const { workArea } = screen.getDisplayMatching(b);
+    if (b.width < workArea.width - 2 || b.height < workArea.height - 2) {
+      winMaximized = false;
+      restoreBounds = null;
+      notifyMaximizeState();
+    }
+  }, 150);
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 800, height: 600,
@@ -355,32 +423,55 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+    lastNormalBounds = mainWindow.getBounds();
   });
 
   // Windows：最大化时拖拽标题栏 → hook 系统消息先还原
   if (process.platform === 'win32') {
     // SC_MOVE：拖拽开始时的系统命令
     mainWindow.hookWindowMessage(0x0112, (wParam) => { // WM_SYSCOMMAND
-      if ((wParam & 0xFFF0) === 0xF010 && mainWindow && !mainWindow.isDestroyed() && mainWindow.isMaximized()) {
-        mainWindow.unmaximize();
+      if ((wParam & 0xFFF0) === 0xF010 && isWindowMaximized()) {
+        unmaximizeWindow();
       }
     });
     // 备用：非客户区左键按下时也尝试还原
     mainWindow.hookWindowMessage(0x00A1, () => { // WM_NCLBUTTONDOWN
-      if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isMaximized()) {
-        mainWindow.unmaximize();
+      if (isWindowMaximized()) {
+        unmaximizeWindow();
       }
     });
   }
 
   // 最大化状态变化 → 通知渲染进程更新按钮图标
-  const notifyMaximize = () => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('maximize-changed', mainWindow.isMaximized());
+  // 注意：transparent 窗口的 isMaximized() 不可靠，这里以 winMaximized 为准
+  mainWindow.on('maximize', () => {
+    if (!winMaximized) {
+      // 外部路径（如系统双击标题栏）触发的最大化：补记还原边框
+      winMaximized = true;
+      restoreBounds = restoreBounds || lastNormalBounds;
+      const target = mainWindow.getBounds();
+      const { workArea } = screen.getDisplayMatching(target);
+      try { mainWindow.setBounds(workArea); } catch {}
     }
-  };
-  mainWindow.on('maximize', notifyMaximize);
-  mainWindow.on('unmaximize', notifyMaximize);
+    notifyMaximizeState();
+  });
+  mainWindow.on('unmaximize', () => {
+    winMaximized = false;
+    // 外部路径（系统双击标题栏等）触发的还原：unmaximize() 不会恢复尺寸，同样回填
+    if (restoreBounds) {
+      try { mainWindow.setBounds(restoreBounds); } catch {}
+      restoreBounds = null;
+    }
+    notifyMaximizeState();
+  });
+  mainWindow.on('resize', () => {
+    scheduleResizeCheck();
+    // 记录"还原态"窗口位置，供外部最大化路径兜底
+    if (!winMaximized && mainWindow && !mainWindow.isDestroyed()) {
+      const b = mainWindow.getBounds();
+      if (b.width > 0 && b.height > 0) lastNormalBounds = b;
+    }
+  });
 
   mainWindow.on('close', (event) => {
     if (!app.isQuitting) { event.preventDefault(); mainWindow.hide(); }
@@ -497,11 +588,12 @@ ipcMain.handle('cancel-reminder', (_, reminderId) => {
 });
 ipcMain.handle('minimize-window', () => mainWindow?.minimize());
 ipcMain.handle('maximize-window', () => {
-  if (mainWindow?.isMaximized()) mainWindow.unmaximize();
-  else mainWindow?.maximize();
+  // 状态由主进程托管（见 maximizeWindow/unmaximizeWindow）
+  if (isWindowMaximized()) unmaximizeWindow();
+  else maximizeWindow();
 });
-ipcMain.handle('unmaximize-window', () => mainWindow?.unmaximize());
-ipcMain.handle('is-maximized', () => mainWindow?.isMaximized() ?? false);
+ipcMain.handle('unmaximize-window', () => unmaximizeWindow());
+ipcMain.handle('is-maximized', () => isWindowMaximized());
 ipcMain.handle('close-window', () => mainWindow?.hide());
 ipcMain.handle('open-external', async (_, url) => {
   // 严格校验 url，避免被 note.ms 之类不可信输入滥用
