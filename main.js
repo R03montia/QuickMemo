@@ -332,6 +332,142 @@ function toggleWindow() {
   else { mainWindow.show(); mainWindow.focus(); }
 }
 
+// ====== 启动项管理（开机自启 / 静默启动） ======
+// 历史遗留：用户此前把 QuickMemo.lnk 直接放进了 shell:startup 文件夹。
+// 现在统一由应用内开关管理，旧的启动文件夹快捷方式在启动时自动迁移（补写自启项 +
+// 把 lnk 改名为 .disabled），避免开机被拉起两份。
+//
+// 为什么不用 app.setLoginItemSettings：应用未打包时它把值名固定成
+// "electron.app.Electron"（Windows「启动应用」里显示成 Electron，不是 QuickMemo），
+// 并且命令行不加引号——路径里一旦有空格，开机就起不来。这里自己写注册表：
+//   HKCU\Software\Microsoft\Windows\CurrentVersion\Run\QuickMemo = "exe" "appDir"
+const RUN_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
+const RUN_VALUE_NAME = 'QuickMemo';
+const LEGACY_RUN_VALUE_NAME = 'electron.app.Electron';
+
+function getLegacyStartupLnkPath() {
+  return path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'QuickMemo.lnk');
+}
+
+// 未打包（开发态直接跑 electron.exe <项目目录>）时，自启命令必须带上应用目录，
+// 否则开机会拉起一个空的 Electron 默认界面。
+function getLoginItemArgs() {
+  return app.isPackaged ? [] : [app.getAppPath()];
+}
+
+function buildLoginCommand() {
+  return [process.execPath, ...getLoginItemArgs()].map(p => '"' + p + '"').join(' ');
+}
+
+// 读 Run 键里某个值的命令行；不存在/读不到返回 null
+function readRunValue(name) {
+  try {
+    const out = require('child_process').execFileSync('reg', ['query', RUN_KEY, '/v', name], {
+      encoding: 'utf8', windowsHide: true, timeout: 4000,
+    });
+    const m = out.match(/REG_SZ\s+(.+)$/m);
+    return m ? m[1].trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+function deleteRunValue(name) {
+  try {
+    require('child_process').execFileSync('reg', ['delete', RUN_KEY, '/v', name, '/f'], {
+      windowsHide: true, stdio: 'ignore', timeout: 4000,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function writeRunValue(cmd) {
+  try {
+    require('child_process').execFileSync('reg',
+      ['add', RUN_KEY, '/v', RUN_VALUE_NAME, '/t', 'REG_SZ', '/d', cmd, '/f'],
+      { windowsHide: true, timeout: 4000 });
+    return true;
+  } catch (e) {
+    console.error('[QuickMemo] write startup registry failed:', e.message);
+    return false;
+  }
+}
+
+function getOpenAtLogin() {
+  if (process.platform !== 'win32') {
+    try {
+      return !!app.getLoginItemSettings({ path: process.execPath, args: getLoginItemArgs() }).openAtLogin;
+    } catch {
+      return false;
+    }
+  }
+  const cmd = readRunValue(RUN_VALUE_NAME);
+  if (!cmd) return false;
+  // 命令必须仍指向当前 exe，否则视为失效（比如 node_modules 被搬走/重装）
+  return cmd.includes(process.execPath);
+}
+
+function setOpenAtLogin(enabled) {
+  // 顺序很重要：先把历史遗留项归位（archiveLnk / cleanup 可能补写 QuickMemo 项），
+  // 再按用户选的目标状态写或删，保证最终状态一定是用户要的那个。
+  archiveLegacyStartupLnk();
+  cleanupLegacyElectronRunEntry();
+  if (process.platform !== 'win32') {
+    try {
+      app.setLoginItemSettings({ openAtLogin: !!enabled, path: process.execPath, args: getLoginItemArgs() });
+    } catch (e) {
+      console.error('[QuickMemo] setLoginItemSettings failed:', e.message);
+    }
+  } else if (enabled) {
+    writeRunValue(buildLoginCommand());
+  } else {
+    deleteRunValue(RUN_VALUE_NAME);
+  }
+  return getOpenAtLogin();
+}
+
+// 清掉早期版本用 Electron API 写进去的 "electron.app.Electron" 值，
+// 但只处理确实指向本应用的那条，别误删其他 Electron 程序的自启项。
+// 若正式项不存在，先把状态转成 QuickMemo 项再删旧值，避免迁移中途丢掉"开机自启"。
+function cleanupLegacyElectronRunEntry() {
+  if (process.platform !== 'win32') return;
+  const cmd = readRunValue(LEGACY_RUN_VALUE_NAME);
+  if (!cmd || !cmd.includes(process.execPath)) return;
+  if (!readRunValue(RUN_VALUE_NAME)) writeRunValue(buildLoginCommand());
+  deleteRunValue(LEGACY_RUN_VALUE_NAME);
+}
+
+function archiveLegacyStartupLnk() {
+  const lnk = getLegacyStartupLnkPath();
+  try {
+    if (!fs.existsSync(lnk)) return false;
+    const bak = lnk + '.disabled';
+    fs.renameSync(lnk, bak);
+    console.log('[QuickMemo] legacy startup shortcut archived ->', bak);
+    return true;
+  } catch (e) {
+    console.warn('[QuickMemo] archive legacy startup shortcut failed:', e.message);
+    return false;
+  }
+}
+
+// 老用户升级：原来靠启动文件夹快捷方式自启，迁移成应用内自启后行为保持不变
+function migrateLegacyStartupLnk() {
+  if (!archiveLegacyStartupLnk()) return;
+  setOpenAtLogin(true);
+  console.log('[QuickMemo] migrated legacy startup shortcut to login item');
+}
+
+function isSilentStartEnabled() {
+  try {
+    return !!(readData().settings || {}).silentStart;
+  } catch {
+    return false;
+  }
+}
+
 // ====== 窗口 ======
 // 最大化状态由主进程自行托管。
 // 本窗口是 transparent + frameless：Windows 上 maximize() 只是把窗口撑满工作区，
@@ -421,8 +557,11 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
 
+  // 静默启动：设置里开了，或命令行带 --silent（登录项可显式强制不弹窗）。
+  // 此时不 show 窗口，应用只驻留托盘，用户用快捷键 / 点托盘图标唤出。
+  const startSilent = isSilentStartEnabled() || process.argv.includes('--silent');
   mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
+    if (!startSilent) mainWindow.show();
     lastNormalBounds = mainWindow.getBounds();
   });
 
@@ -528,6 +667,10 @@ if (!gotTheLock) {
       app.isQuitting = true;
       try { globalShortcut.unregisterAll(); } catch {}
     });
+
+    // 迁移历史上的「启动」文件夹快捷方式（一次性），再建窗口
+    try { migrateLegacyStartupLnk(); } catch (e) { console.warn('[QuickMemo] migrate startup lnk error:', e.message); }
+    try { cleanupLegacyElectronRunEntry(); } catch (e) { console.warn('[QuickMemo] cleanup legacy run entry error:', e.message); }
 
     createWindow();
     createTray();
@@ -645,6 +788,20 @@ ipcMain.handle('set-panel-alpha', (_, alpha) => {
   d.settings = d.settings || {};
   d.settings.panelAlpha = alpha;
   writeData(d);
+});
+
+// ====== 启动项 IPC ======
+ipcMain.handle('get-startup-settings', () => ({
+  openAtLogin: getOpenAtLogin(),
+  silentStart: isSilentStartEnabled(),
+}));
+ipcMain.handle('set-open-at-login', (_, enabled) => setOpenAtLogin(enabled));
+ipcMain.handle('set-silent-start', (_, enabled) => {
+  const d = readData();
+  d.settings = d.settings || {};
+  d.settings.silentStart = !!enabled;
+  writeData(d);
+  return !!enabled;
 });
 
 ipcMain.handle('export-markdown-file', async (_, { filename, content }) => {

@@ -115,6 +115,10 @@
           <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="6" width="12" height="9" rx="1"/><path d="M7 6V4M13 6V4"/></svg>
           <span>快捷键</span>
         </div>
+        <div class="settings-nav-item" data-section="startup">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5v7"/><path d="M5.6 5.2a6.5 6.5 0 1 0 8.8 0"/></svg>
+          <span>启动</span>
+        </div>
         <div class="settings-nav-item" data-section="customcss">
           <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H4z" rx="2"/><path d="M8 8h8M8 11h5"/></svg>
           <span>自定义 CSS</span>
@@ -332,7 +336,37 @@
         </div>
 
 
-                <div id="section-about" class="settings-page" style="display:none;">
+        <div id="section-startup" class="settings-page" style="display:none;">
+          <div class="settings-page-header">
+            <h3>启动</h3>
+            <p>控制是否随 Windows 一起启动，以及启动后要不要直接收进托盘</p>
+          </div>
+          <div class="settings-page-body">
+            <div class="editor-toggle-item">
+              <div class="editor-toggle-label">
+                <span class="editor-toggle-title">开机自启</span>
+                <span class="editor-toggle-desc">登录 Windows 后自动启动 QuickMemo（会接管原来手动放进「启动」文件夹的快捷方式）</span>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="toggle-open-at-login">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="editor-toggle-item">
+              <div class="editor-toggle-label">
+                <span class="editor-toggle-title">静默启动</span>
+                <span class="editor-toggle-desc">启动后不弹出窗口，直接驻留托盘；之后用全局快捷键或点击托盘图标唤出</span>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="toggle-silent-start">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <p id="startup-status" class="shortcut-status"></p>
+          </div>
+        </div>
+
+        <div id="section-about" class="settings-page" style="display:none;">
           <div class="settings-page-body about-content" style="padding-top:20px;">
             <div class="about-section" style="text-align:center;">
               <div class="about-logo">

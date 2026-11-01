@@ -1509,6 +1509,25 @@ function setupSettings() {
     if (section === 'customcss') {
       loadCustomCSS();
     }
+    if (section === 'startup') {
+      loadStartupSettings();
+    }
+  }
+
+  // ====== 启动项设置 ======
+  async function loadStartupSettings() {
+    const openEl = document.getElementById('toggle-open-at-login');
+    const silentEl = document.getElementById('toggle-silent-start');
+    if (!openEl || !silentEl) return;
+    const status = document.getElementById('startup-status');
+    if (status) status.textContent = '';   // 换页时清掉上一次的「已加入/已取消」提示
+    try {
+      const s = await window.electronAPI.getStartupSettings();
+      openEl.checked = !!s.openAtLogin;   // 以系统里真实的自启状态为准
+      silentEl.checked = !!s.silentStart;
+    } catch (e) {
+      console.warn('[QuickMemo] load startup settings failed:', e);
+    }
   }
 
   // ====== 快捷键设置 ======
@@ -1678,6 +1697,37 @@ function setupSettings() {
         MarkdownEditor.init(bodyContainer, content, isMarkdownEnabledForNote(note));
         registerEditorCallbacks();
       }
+    }
+  });
+
+  // ====== 启动项开关 ======
+  document.getElementById('toggle-open-at-login')?.addEventListener('change', async function () {
+    const status = document.getElementById('startup-status');
+    const el = this;
+    el.disabled = true;
+    try {
+      // 主进程返回系统里的真实状态（写注册表可能被安全软件拦掉）
+      const openAtLogin = await window.electronAPI.setOpenAtLogin(el.checked);
+      el.checked = !!openAtLogin;
+      if (status) status.textContent = openAtLogin ? '✓ 已加入开机启动' : '✓ 已取消开机启动';
+    } catch (e) {
+      el.checked = !el.checked;
+      if (status) status.textContent = '✗ 设置失败：' + (e.message || e);
+    } finally {
+      el.disabled = false;
+    }
+  });
+
+  document.getElementById('toggle-silent-start')?.addEventListener('change', async function () {
+    const status = document.getElementById('startup-status');
+    const el = this;
+    try {
+      const silent = await window.electronAPI.setSilentStart(el.checked);
+      el.checked = !!silent;
+      if (status) status.textContent = silent ? '✓ 下次启动将直接驻留托盘' : '✓ 下次启动会正常弹出窗口';
+    } catch (e) {
+      el.checked = !el.checked;
+      if (status) status.textContent = '✗ 设置失败：' + (e.message || e);
     }
   });
 

@@ -137,3 +137,26 @@ icacls "C:\Users\29981\Desktop\QuickMemo" /setintegritylevel Medium /T /C
 `isWindowMaximized()`。最大化前记录 `restoreBounds`，还原时 `unmaximize()`
 之后强制 `setBounds(restoreBounds)`；`maximize-changed` 只用于刷新按钮图标。
 新增窗口状态相关逻辑时沿用这三个函数，别再直连 `isMaximized()`。
+
+## 10 启动项与静默启动（2026-11-01）
+
+设置面板新增「启动」页（`data-section="startup"`），两个开关：
+
+- **开机自启**：主进程**自管注册表**，写
+  `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` 的值 `QuickMemo`，内容为
+  逐段加引号的 `"electron.exe" "<项目目录>"`（未打包时必须带 app 目录参数）。
+  - **不要**改回 `app.setLoginItemSettings()`：未打包时它把值名固定成
+    `electron.app.Electron`（Windows「启动应用」列表里显示 Electron 而非 QuickMemo），
+    且命令行不加引号，路径含空格就起不来。非 win32 才回退 Electron API。
+  - `setOpenAtLogin()` 的顺序是「先 `archiveLegacyStartupLnk` + `cleanupLegacyElectronRunEntry`，
+    再按目标状态写/删」；反过来 cleanup 可能把刚关掉的自启又写回来。
+- **迁移**：历史上用户把 `QuickMemo.lnk` 放在启动文件夹
+  （`%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup`）。启动时
+  `migrateLegacyStartupLnk()` 会把它改名成 `.lnk.disabled` 并补写注册表项，避免开机起两份。
+- **静默启动**：`settings.silentStart`（存 `data/notes.json`）。为 true 时
+  `createWindow()` 的 `ready-to-show` 不 `show()`，只驻留托盘；命令行 `--silent` 也可强制。
+- **验证**：`reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v QuickMemo`；
+  静默看 `data/notes.json` 的 `settings.silentStart`。改完必须**重启应用**才生效
+  （preload / main 的 IPC 不热重载）。
+- **本机跑 Electron 验证前**：清掉 `ELECTRON_RUN_AS_NODE`（否则以纯 Node 模式跑，
+  报 `Cannot find module 'electron'`），且需要 danger-full-access（见第 8 节）。
