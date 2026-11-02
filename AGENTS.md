@@ -152,7 +152,11 @@ icacls "C:\Users\29981\Desktop\QuickMemo" /setintegritylevel Medium /T /C
     再按目标状态写/删」；反过来 cleanup 可能把刚关掉的自启又写回来。
 - **迁移**：历史上用户把 `QuickMemo.lnk` 放在启动文件夹
   （`%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup`）。启动时
-  `migrateLegacyStartupLnk()` 会把它改名成 `.lnk.disabled` 并补写注册表项，避免开机起两份。
+  `migrateLegacyStartupLnk()` 会把它**移到 `userData\startup-backup\`**，再补写注册表项。
+  - **绝对不要**在启动文件夹里「改名成 `.disabled`」了事：Windows 登录时会用
+    ShellExecute「打开」启动文件夹里的每一个文件，只有 `.lnk` 才会执行目标；
+    `QuickMemo.lnk.disabled` 会被当成普通文件用关联程序打开 —— 表现为
+    「每次开机弹出一个 .disabled 文件窗口」（2026-11-02 实测踩到，已改为移出该目录）。
 - **静默启动**：`settings.silentStart`（存 `data/notes.json`）。为 true 时
   `createWindow()` 的 `ready-to-show` 不 `show()`，只驻留托盘；命令行 `--silent` 也可强制。
 - **验证**：`reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v QuickMemo`；

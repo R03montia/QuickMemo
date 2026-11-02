@@ -439,26 +439,51 @@ function cleanupLegacyElectronRunEntry() {
   deleteRunValue(LEGACY_RUN_VALUE_NAME);
 }
 
-function archiveLegacyStartupLnk() {
-  const lnk = getLegacyStartupLnkPath();
+// 归档位置放在 userData 下，**绝不能留在「启动」文件夹里**：
+// Windows 登录时会用 ShellExecute「打开」启动文件夹里的每一个文件，
+// 只有 .lnk 才会执行目标；把 lnk 改名成 .lnk.disabled 反而会被当成普通文件
+// 用关联程序打开 —— 这正是「每次开机弹出一个 .disabled 文件窗口」的根因。
+function getStartupBackupDir() {
+  return path.join(app.getPath('userData'), 'startup-backup');
+}
+
+function moveOutOfStartupFolder(srcPath) {
   try {
-    if (!fs.existsSync(lnk)) return false;
-    const bak = lnk + '.disabled';
-    fs.renameSync(lnk, bak);
-    console.log('[QuickMemo] legacy startup shortcut archived ->', bak);
+    if (!fs.existsSync(srcPath)) return false;
+    fs.mkdirSync(getStartupBackupDir(), { recursive: true });
+    let dest = path.join(getStartupBackupDir(), path.basename(srcPath));
+    if (fs.existsSync(dest)) dest = dest + '.' + Date.now();
+    try {
+      fs.renameSync(srcPath, dest);
+    } catch {
+      // 跨卷时 rename 会失败，退回复制 + 删除
+      fs.copyFileSync(srcPath, dest);
+      fs.unlinkSync(srcPath);
+    }
+    console.log('[QuickMemo] startup item moved out of Startup folder ->', dest);
     return true;
   } catch (e) {
-    console.warn('[QuickMemo] archive legacy startup shortcut failed:', e.message);
+    console.warn('[QuickMemo] move startup item failed:', srcPath, e.message);
     return false;
   }
 }
 
-// 老用户升级：原来靠启动文件夹快捷方式自启，迁移成应用内自启后行为保持不变
+// 返回 true 表示确实归档了一个「有效的」QuickMemo.lnk（调用方据此补写自启项）。
+// .lnk.disabled 是旧版本留下的残留，顺手也清出启动文件夹。
+function archiveLegacyStartupLnk() {
+  const lnk = getLegacyStartupLnkPath();
+  const hadRealLnk = fs.existsSync(lnk);
+  if (hadRealLnk) moveOutOfStartupFolder(lnk);
+  moveOutOfStartupFolder(lnk + '.disabled');
+  return hadRealLnk;
+}
+
 function migrateLegacyStartupLnk() {
   if (!archiveLegacyStartupLnk()) return;
   setOpenAtLogin(true);
   console.log('[QuickMemo] migrated legacy startup shortcut to login item');
 }
+
 
 function isSilentStartEnabled() {
   try {
