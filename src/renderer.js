@@ -18,6 +18,7 @@ const SVG = {
 
 let state = { notes: [], reminders: [], selectedId: null, multiSelected: new Set(), multiMode: false };
 let saveTimer = null;
+const pendingOnlineRefreshes = new WeakSet();
 let settings = { markdownEnabled: true, notemsMarkdownEnabled: false, theme: 'system', appearance: 'bordered', panelAlpha: 82, customCSS: '' };
 
 function isMarkdownEnabledForNote(note) {
@@ -868,20 +869,64 @@ function renderEditor(id) {
   }
   document.getElementById('reminder-picker').style.display = 'none';
 
-  // 显示/隐藏在线笔记刷新按钮
-  const refreshBtn = document.getElementById('btn-refresh-notems');
-  if (note.notemsKey || note.getnoteKey) {
-    refreshBtn.style.display = 'inline-flex';
-    refreshBtn.dataset.key = note.notemsKey || note.getnoteKey;
-    refreshBtn.dataset.service = note.notemsKey ? 'notems' : 'getnote';
-  } else {
-    refreshBtn.style.display = 'none';
-  }
+  updateOnlineRefreshButton(note);
   // Markdown 未开启时隐藏模式切换按钮和模式标识
   const footerToggle = document.getElementById('footer-mode-toggle');
   const noteModeEl = document.getElementById('note-mode');
   if (footerToggle) footerToggle.style.display = useMarkdown ? '' : 'none';
   if (noteModeEl) noteModeEl.style.display = useMarkdown ? '' : 'none';
+}
+
+function updateOnlineRefreshButton(note) {
+  const btn = document.getElementById('btn-refresh-notems');
+  const pending = !!note && pendingOnlineRefreshes.has(note);
+  btn.style.display = note && (note.notemsKey || note.getnoteKey) ? 'inline-flex' : 'none';
+  btn.disabled = pending;
+  btn.classList.toggle('spin', pending);
+}
+
+async function refreshOnlineNote() {
+  const note = state.notes.find(n => n.id === state.selectedId);
+  const key = note?.notemsKey || note?.getnoteKey;
+  if (!key || pendingOnlineRefreshes.has(note)) return;
+
+  // 确认框和请求都可能让出控制权；先锁定目标、服务和用户同意覆盖的正文。
+  const { body, notemsKey, getnoteKey } = note;
+  const canApply = () => state.notes.includes(note)
+    && note.notemsKey === notemsKey && note.getnoteKey === getnoteKey && note.body === body;
+  const skipped = () => showToast('笔记已修改、删除或更换链接，本次刷新未覆盖本地内容。');
+
+  pendingOnlineRefreshes.add(note);
+  updateOnlineRefreshButton(note);
+  try {
+    const ok = await showConfirm('将重新获取在线内容，覆盖「' + (note.title || '未命名') + '」的正文。确定吗？');
+    if (!ok) return;
+    if (!canApply()) { skipped(); return; }
+
+    const content = notemsKey
+      ? await window.electronAPI.getNotemsContent(key)
+      : await window.electronAPI.getGetnoteContent(key);
+    if (!content) return;
+    if (content.startsWith('__DEBUG__:') || content.startsWith('__ERROR__:')) {
+      showToast('刷新失败：' + content.replace(/^__(?:DEBUG|ERROR)__:/, '').slice(0, 200));
+      return;
+    }
+    if (!canApply()) { skipped(); return; }
+
+    note.body = content;
+    if (state.selectedId === note.id) {
+      const bodyContainer = document.getElementById('note-body-container');
+      MarkdownEditor.setContent(bodyContainer, content);
+      updateCharCount(content);
+    }
+    // 只保存本地数据，并保留其他笔记已有的文件自动保存任务。
+    await saveLocalData();
+  } catch (error) {
+    showToast('刷新失败：' + (error?.message || '无法读取或保存在线笔记'));
+  } finally {
+    pendingOnlineRefreshes.delete(note);
+    updateOnlineRefreshButton(state.notes.find(n => n.id === state.selectedId));
+  }
 }
 
 function setupNewNote() {
@@ -1107,30 +1152,7 @@ function setupEditor() {
   });
 
   // ====== 在线笔记刷新按钮 ======
-  document.getElementById('btn-refresh-notems').addEventListener('click', async () => {
-    const key = document.getElementById('btn-refresh-notems').dataset.key;
-    if (!key) return;
-    const ok = await showConfirm('将重新获取在线内容，覆盖当前编辑。确定吗？');
-    if (!ok) return;
-    const btn = document.getElementById('btn-refresh-notems');
-    btn.classList.add('spin');
-    const content = document.getElementById('btn-refresh-notems').dataset.service === 'getnote' ? await window.electronAPI.getGetnoteContent(key) : await window.electronAPI.getNotemsContent(key);
-    btn.classList.remove('spin');
-    if (!content) return;
-    // 解析失败的调试串绝不能覆盖正文
-    if (content.startsWith('__DEBUG__:') || content.startsWith('__ERROR__:')) {
-      showToastMessage('刷新失败：' + content.replace(/^__(?:DEBUG|ERROR)__:/, '').slice(0, 200));
-      return;
-    }
-    {
-      const note = state.notes.find(n => n.id === state.selectedId);
-      if (note) {
-        note.body = content;
-        MarkdownEditor.setContent(document.getElementById('note-body-container'), content);
-        scheduleSave();
-      }
-    }
-  });
+  document.getElementById('btn-refresh-notems').addEventListener('click', refreshOnlineNote);
 
   // ====== 模式切换按钮（底部栏）======
   const btnToggleMode = document.getElementById('btn-toggle-mode');
@@ -1328,6 +1350,10 @@ function setupCalendar() {
 }
 
 // ====== 工具函数 ======
+function saveLocalData() {
+  return window.electronAPI.saveData({ notes: state.notes, reminders: state.reminders.filter(r => !r.done), settings });
+}
+
 function scheduleSave() {
   clearTimeout(saveTimer);
   const status = document.getElementById('note-status');
@@ -1350,7 +1376,7 @@ function scheduleSave() {
       const cur = state.notes.find(n => n.id === state.selectedId);
       if (cur && bc) cur.body = MarkdownEditor.getContent(bc);
     } catch {}
-    await window.electronAPI.saveData({ notes: state.notes, reminders: state.reminders.filter(r => !r.done), settings: settings });
+    await saveLocalData();
     if (snapshotFilePath) {
       const freshNote = state.notes.find(n => n.id === snapshotId);
       const ok = await window.electronAPI.saveFile(snapshotFilePath, (freshNote ? freshNote.body : '') || '');
